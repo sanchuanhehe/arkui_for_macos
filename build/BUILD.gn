@@ -1,0 +1,77 @@
+# Copyright (c) 2026 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Phase 2 path X (M1): the native macOS app executable `ace_macos`.
+#
+# NOTE: a fully running app needs the entire ace_engine framework built for mac
+# (libace_static_mac) plus ability_runtime — a large port still in progress. This
+# target wires the new adapter/macos layer + app shell + the graphic backend so
+# the new code compiles and the link surface is exercised; missing framework
+# symbols are the expected, reported blocker for M1.
+
+import("//build/ohos.gni")
+import("//foundation/arkui/ace_engine/ace_config.gni")
+
+ohos_executable("ace_macos") {
+  sources = [
+    "//foundation/arkui/ace_engine/adapter/macos/entrance/MacAppDelegate.mm",
+    "//foundation/arkui/ace_engine/adapter/macos/entrance/main.mm",
+  ]
+
+  include_dirs = [
+    "$ace_root/adapter/macos/entrance",
+    "$ace_root/adapter/macos/stage/ability",
+  ]
+
+  cflags_objc = [
+    "-fvisibility=default",
+    "-fobjc-weak",
+  ]
+  cflags_objcc = cflags_objc
+
+  deps = [
+    "//foundation/appframework/graphic_2d:platform",
+    "//foundation/arkui/ace_engine/adapter/macos/entrance:ace_macos_entrance",
+    "//foundation/arkui/ace_engine/adapter/macos/stage/ability:stage_macos_entrance",
+    "//foundation/arkui/ace_engine/adapter/macos/stage/uicontent:ace_uicontent_mac",
+
+    # The full ArkUI framework, built for mac (pulls platform_deps incl. the
+    # macos adapter via ace_lib.gni).
+    "//foundation/arkui/ace_engine/build:libace_static_mac",
+
+    # Phase 0 path X (M1 link): the ArkTS VM file loader. js_pandafile_manager.o
+    # (ets_runtime) references panda::panda_file::*/panda::Logger/panda::os::*;
+    # those live in the libpanda* static libs which the ace group does not pull
+    # into the exe. Link them directly.
+    "//arkcompiler/runtime_core/libpandabase:libarkbase_static",
+    "//arkcompiler/runtime_core/libpandafile:libarkfile_runtime_static",
+
+    # Phase 0 path X (M1 link): ace_kit provides the theme TokenColors/TokenTheme
+    # and Kit::UIContext/ContentModifier symbols (rendering uses theme tokens).
+    "//foundation/arkui/ace_engine/interfaces/inner_api/ace_kit:ace_kit",
+  ]
+
+  frameworks = [
+    "AppKit.framework",
+    "QuartzCore.framework",
+    "OpenGL.framework",
+    "CoreVideo.framework",
+    # CoreText + CoreGraphics: skia's mac font ports (SkFontMgr_mac_ct / SkShaper_coretext)
+    # need these once skia_use_fonthost_mac=true is enabled for text rendering.
+    "CoreText.framework",
+    "CoreGraphics.framework",
+  ]
+
+  subsystem_name = "arkui"
+  part_name = "ace_engine"
+}
