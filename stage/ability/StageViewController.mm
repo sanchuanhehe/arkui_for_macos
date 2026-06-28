@@ -88,7 +88,11 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
 }
 
 - (void)initColorMode {
-    [[StageConfigurationManager configurationManager] colorModeUpdate:MacOSUserInterfaceStyleLight];
+    // Seed from the actual system appearance instead of hard-coding Light, so a
+    // launch under Dark mode renders dark. Live switches are handled by
+    // WindowView's -viewDidChangeEffectiveAppearance.
+    StageConfigurationManager* mgr = [StageConfigurationManager configurationManager];
+    [mgr colorModeUpdate:[mgr currentColorMode]];
 }
 
 - (void)initWindowView {

@@ -43,6 +43,11 @@ typedef NS_ENUM(NSInteger, MacOSUserInterfaceStyle) {
 
 - (void)colorModeUpdate:(MacOSUserInterfaceStyle)colorMode;
 
+// Resolve the current system appearance (NSApp.effectiveAppearance) into the
+// mirrored Light/Dark enum. Used to seed the color mode at launch and on live
+// appearance switches instead of assuming Light.
+- (MacOSUserInterfaceStyle)currentColorMode;
+
 // macOS: device-idiom (phone/tablet) has no AppKit equivalent; kept for parity.
 - (void)setDeviceType:(NSInteger)deviceType;
 
