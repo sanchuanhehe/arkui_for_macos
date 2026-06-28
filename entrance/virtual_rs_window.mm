@@ -326,6 +326,9 @@ std::shared_ptr<Window> Window::CreateSubWindow(
     LOGI("Window::Createsubwindow with %{public}p", windowView);
     window->SetWindowView(windowView);
     [windowView setWindowDelegate:window];
+    // Sub-window: render a transparent background so only the popup/menu content
+    // shows over the main window (the host fills the screen, see ShowWindow).
+    [windowView markAsTransparentSubWindow];
     [windowView createSurfaceNode];
     window->IncStrongRef(window.get());
     window->SetWindowName(option->GetWindowName());

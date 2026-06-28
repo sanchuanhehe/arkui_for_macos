@@ -49,6 +49,10 @@ class Window;
 
 - (NSViewController*)getViewController;
 
+// Mark this view as a transparent sub-window host (Dialog/Menu/Popup), so its
+// backing layer clears to alpha 0 and only the popup content is visible.
+- (void)markAsTransparentSubWindow;
+
 - (void)setWindowDelegate:(std::shared_ptr<OHOS::Rosen::Window>)window;
 - (void)createSurfaceNode;
 - (BOOL)requestFocus;

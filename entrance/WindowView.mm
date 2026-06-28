@@ -86,6 +86,15 @@ std::u16string NSStringToU16(NSString* s)
 // FBO whose GL_COLOR_ATTACHMENT0 should be blitted to the layer drawable.
 // Set by the render_context once it has created the offscreen framebuffer.
 @property (nonatomic, assign) GLuint sourceFramebuffer;
+// The owning RenderContextGL instance's color renderbuffer, pushed here by
+// RSSurfaceGPU::FlushFrame after each render. Per-layer (not the global
+// "last MakeCurrent wins" RenderContextGL::GetCurrentColorbuffer), so a second
+// window (sub-window) blits ITS own content instead of the main window's.
+// Settable via KVC by the graphic_2d layer (key "sourceColorbuffer").
+@property (nonatomic, assign) GLuint sourceColorbuffer;
+// Transparent background: a sub-window layer clears to alpha 0 so only the
+// popup/menu content shows; the main window stays opaque white.
+@property (nonatomic, assign) BOOL transparentBackground;
 @end
 
 @implementation WindowGLLayer
@@ -228,7 +237,13 @@ std::u16string NSStringToU16(NSString* s)
     // attachment IS (same share group). So we wrap render_context's shared colorbuffer in OUR
     // OWN FBO (_blitFbo, valid in this context) and blit from that. (Using framebuffer_ directly
     // read as an empty/white surface, which was the cause of the blank window.)
-    GLuint colorRb = OHOS::Rosen::RenderContextGL::GetCurrentColorbuffer();
+    // Prefer THIS layer's own colorbuffer (pushed per-render by RSSurfaceGPU) over
+    // the global last-MakeCurrent-wins one, so the main window and a sub-window each
+    // blit their own content instead of colliding on the shared global.
+    GLuint colorRb = self.sourceColorbuffer;
+    if (colorRb == 0) {
+        colorRb = OHOS::Rosen::RenderContextGL::GetCurrentColorbuffer();
+    }
 
     if (colorRb != 0 && dstW > 0 && dstH > 0) {
         if (_blitFbo == 0) {
@@ -246,7 +261,13 @@ std::u16string NSStringToU16(NSString* s)
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFbo));
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(drawFbo));
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        // Sub-window: clear transparent so only the popup/menu content is visible
+        // over the main window; main window stays opaque white.
+        if (self.transparentBackground) {
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        } else {
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        }
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
@@ -292,6 +313,10 @@ std::u16string NSStringToU16(NSString* s)
     // priority thread, so every callback marshals to the main queue before
     // touching RS / UIContent / the window delegate.
     CVDisplayLinkRef _displayLink;
+
+    // Set for sub-window views (Dialog/Menu/Popup) so their backing WindowGLLayer
+    // clears to transparent instead of opaque white — only the popup content shows.
+    BOOL _transparentSubWindow;
 }
 
 #pragma mark - Backing layer (replaces +layerClass / CAEAGLLayer)
@@ -312,7 +337,19 @@ std::u16string NSStringToU16(NSString* s)
     WindowGLLayer* layer = [[WindowGLLayer alloc] init];
     CGFloat scale = [self currentBackingScale];
     layer.contentsScale = scale;
+    layer.transparentBackground = _transparentSubWindow;
     return layer;
+}
+
+// Called by virtual_rs_window's CreateSubWindow so this view renders a transparent
+// background (sub-window host); the backing layer may not exist yet, so remember
+// the flag and also apply it if the layer is already up.
+- (void)markAsTransparentSubWindow
+{
+    _transparentSubWindow = YES;
+    if ([self.layer isKindOfClass:[WindowGLLayer class]]) {
+        ((WindowGLLayer*)self.layer).transparentBackground = YES;
+    }
 }
 
 // ArkUI expects a top-left origin coordinate system; AppKit defaults to

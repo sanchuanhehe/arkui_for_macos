@@ -178,6 +178,11 @@ void SubwindowIos::ShowWindow(bool needFocus)
     rects.emplace_back(MIN_WINDOW_HOT_AREA);
     SetHotAreas(rects, -1);
     window_->SetFocusable(needFocus);
+    // Size the sub-window to the full display BEFORE showing it: the engine models
+    // a sub-window as a full-screen transparent host (the popup is positioned inside
+    // it). Without this rect_ stays 0 at ShowWindow time, so the NSPanel/surface are
+    // unbounded and NotifySurfaceChanged never fires with a real size.
+    ResizeWindow();
     auto ret = window_->ShowWindow();
     if (ret != Rosen::WMError::WM_OK) {
         TAG_LOGW(AceLogTag::ACE_SUB_WINDOW, "Show subwindow id:%{public}u failed with WMError: %{public}d",
