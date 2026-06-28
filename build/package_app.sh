@@ -14,7 +14,6 @@ APP_NAME="${2:?app_name required}"
 DEST_DIR="${3:-$OUT_DIR}"
 
 EXE="$OUT_DIR/arkui/ace_engine/ace_macos"
-DYLIB="$OUT_DIR/arkui/ace_engine_cross/libace_container_scope.dylib"
 RES_SRC="$OUT_DIR/arkui/ace_engine/arkui-x"
 
 APP="$DEST_DIR/$APP_NAME.app"
@@ -23,7 +22,6 @@ MACOS_DIR="$CONTENTS/MacOS"
 FRAMEWORKS="$CONTENTS/Frameworks"
 
 [ -f "$EXE" ] || { echo "missing exe: $EXE"; exit 1; }
-[ -f "$DYLIB" ] || { echo "missing dylib: $DYLIB"; exit 1; }
 [ -d "$RES_SRC" ] || { echo "missing resources: $RES_SRC"; exit 1; }
 
 echo "=> building $APP"
@@ -33,14 +31,37 @@ mkdir -p "$MACOS_DIR" "$FRAMEWORKS"
 # 1) executable
 cp "$EXE" "$MACOS_DIR/ace_macos"
 
-# 2) dylib into Contents/Frameworks; the exe references it via a cwd-relative
-#    install name (arkui/ace_engine_cross/...), which breaks once double-clicked
-#    (cwd = /). Rewrite that reference to an @executable_path-relative one.
-cp "$DYLIB" "$FRAMEWORKS/libace_container_scope.dylib"
-install_name_tool -change \
-  "arkui/ace_engine_cross/libace_container_scope.dylib" \
-  "@executable_path/../Frameworks/libace_container_scope.dylib" \
-  "$MACOS_DIR/ace_macos"
+# 2) auto-collect dylib dependencies into Contents/Frameworks.
+#    The build links several dylibs with cwd-relative install names
+#    (e.g. arkui/ace_engine_cross/libace_container_scope.dylib,
+#    thirdparty/libxml2/libxml2.dylib). They resolve when run from out/arkui-x
+#    but break once double-clicked (a .app launches with cwd=/, and dyld loads
+#    libraries BEFORE our constructor can chdir). Rather than hard-code each one,
+#    walk otool -L transitively: copy every cwd-relative dep (path not starting
+#    with / or @) into Frameworks and rewrite the reference to @executable_path.
+collect_deps() {
+  # $1 = mach-o binary whose cwd-relative deps should be vendored + rewritten
+  local binary="$1" dep base src
+  while IFS= read -r dep; do
+    [ -n "$dep" ] || continue
+    base="$(basename "$dep")"
+    if [ ! -f "$FRAMEWORKS/$base" ]; then
+      # locate the source dylib: prefer the verbatim relative path under the out
+      # dir, else fall back to a basename search (covers unstripped_dylib/ etc.)
+      src="$OUT_DIR/$dep"
+      [ -f "$src" ] || src="$(find "$OUT_DIR" -name "$base" -type f 2>/dev/null | head -1)"
+      if [ -n "$src" ] && [ -f "$src" ]; then
+        cp "$src" "$FRAMEWORKS/$base"; chmod u+w "$FRAMEWORKS/$base"
+        collect_deps "$FRAMEWORKS/$base"   # recurse: this dylib's own deps
+      else
+        echo "  ⚠ dependency not found, skipping: $dep"
+      fi
+    fi
+    install_name_tool -change "$dep" "@executable_path/../Frameworks/$base" "$binary" 2>/dev/null || true
+  done < <(otool -L "$binary" | awk 'NR>1{print $1}' | grep -vE '^/|^@')
+}
+collect_deps "$MACOS_DIR/ace_macos"
+echo "=> vendored $(ls -1 "$FRAMEWORKS" 2>/dev/null | wc -l | tr -d ' ') dylib(s) into Frameworks"
 
 # 3) resources go under Contents/Resources (the asset manager resolves them at
 #    [NSBundle mainBundle].resourcePath + "/arkui-x", which for an .app is
@@ -76,7 +97,9 @@ PLIST
 #    --deep is deprecated; sign each item explicitly. (Real Developer-ID signing +
 #    notarization is the remaining M9 step, blocked on a certificate.)
 BUNDLE_ID="com.arkui.x.$APP_NAME"
-codesign --force --sign - "$FRAMEWORKS/libace_container_scope.dylib"
+for dylib in "$FRAMEWORKS"/*.dylib; do
+  [ -f "$dylib" ] && codesign --force --sign - "$dylib"
+done
 codesign --force --sign - --identifier "$BUNDLE_ID" "$MACOS_DIR/ace_macos"
 codesign --force --sign - --identifier "$BUNDLE_ID" "$APP"
 echo "=> signature:"
