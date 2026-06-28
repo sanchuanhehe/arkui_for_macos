@@ -43,6 +43,9 @@ class Window;
 @property (nonatomic, assign) BOOL fullScreen;
 @property (nonatomic, assign) NSInteger zOrder;
 @property (nonatomic, assign) float brightness;
+// ArkUI instance id this view renders, set by StageViewController. Used by the
+// NSAccessibility bridge to walk the matching engine accessibility tree.
+@property (nonatomic, assign) int32_t instanceId;
 
 - (NSViewController*)getViewController;
 

@@ -93,6 +93,7 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
 
 - (void)initWindowView {
     _windowView = [[WindowView alloc] init];
+    _windowView.instanceId = _instanceId;
     [_windowView startBaseDisplayLink];
     _windowView.frame = self.view.bounds;
     _windowView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;

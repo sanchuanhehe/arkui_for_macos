@@ -48,6 +48,7 @@
 #include "hilog.h"
 #include "base/utils/time_util.h"
 #include "virtual_rs_window.h"
+#include "adapter/macos/entrance/mac_accessibility_bridge.h"
 #include "ace_pointer_data_packet.h"
 #include "core/event/key_event.h"
 #include "configuration.h"
@@ -1170,5 +1171,98 @@ static CVReturn WindowViewDisplayLinkCallback(CVDisplayLinkRef displayLink,
 // iOS overrode -safeAreaInsetsDidChange. macOS desktop windows have no safe-area
 // insets, status bar, or interface orientation; nothing to forward here.
 // macOS: no-op
+
+#pragma mark - NSAccessibility (expose the ArkUI tree to VoiceOver / Inspector)
+
+// Map an ArkUI component tag to the closest AppKit accessibility role, so
+// VoiceOver announces e.g. a Button as a button and Text as static text.
+static NSAccessibilityRole AceTagToNSRole(const std::string& tag)
+{
+    if (tag == "Text" || tag == "Span" || tag == "RichText") {
+        return NSAccessibilityStaticTextRole;
+    }
+    if (tag == "Button") {
+        return NSAccessibilityButtonRole;
+    }
+    if (tag == "TextInput" || tag == "TextArea" || tag == "Search") {
+        return NSAccessibilityTextFieldRole;
+    }
+    if (tag == "Image") {
+        return NSAccessibilityImageRole;
+    }
+    if (tag == "Toggle" || tag == "Checkbox") {
+        return NSAccessibilityCheckBoxRole;
+    }
+    if (tag == "Slider") {
+        return NSAccessibilitySliderRole;
+    }
+    return NSAccessibilityGroupRole;
+}
+
+// WindowView is an accessibility container, not a leaf element.
+- (BOOL)isAccessibilityElement
+{
+    return NO;
+}
+
+- (NSString*)accessibilityRole
+{
+    return NSAccessibilityGroupRole;
+}
+
+// Snapshot the engine accessibility tree and mirror it as a tree of
+// NSAccessibilityElements rooted under this view. AppKit queries this on demand,
+// so each call reflects the current UI. Geometry: the engine reports rects in
+// window coordinates, top-left origin, physical px; this view is isFlipped (YES)
+// so dividing by the backing scale yields top-left view points, which convert to
+// the screen rect AppKit expects.
+- (NSArray*)accessibilityChildren
+{
+    if (self.instanceId < 0) {
+        return @[];
+    }
+    std::vector<OHOS::Ace::Platform::MacA11yNode> nodes =
+        OHOS::Ace::Platform::BuildMacA11yTree(self.instanceId);
+    if (nodes.empty()) {
+        return @[];
+    }
+    const CGFloat scale = [self currentBackingScale] > 0 ? [self currentBackingScale] : 1.0;
+
+    NSMutableDictionary<NSNumber*, NSAccessibilityElement*>* byId = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSNumber*, NSMutableArray*>* kids = [NSMutableDictionary dictionary];
+    NSMutableArray<NSAccessibilityElement*>* roots = [NSMutableArray array];
+
+    for (const auto& n : nodes) {
+        NSRect viewRect = NSMakeRect(n.x / scale, n.y / scale, n.w / scale, n.h / scale);
+        NSRect winRect = [self convertRect:viewRect toView:nil];
+        NSRect screenRect = self.window ? [self.window convertRectToScreen:winRect] : winRect;
+        NSString* label = [NSString stringWithUTF8String:n.label.c_str()];
+        NSAccessibilityElement* el =
+            [NSAccessibilityElement accessibilityElementWithRole:AceTagToNSRole(n.role)
+                                                           frame:screenRect
+                                                           label:(label.length ? label : nil)
+                                                          parent:nil];
+        if (n.checkable) {
+            [el setAccessibilityValue:@(n.checked ? 1 : 0)];
+        }
+        byId[@(n.id)] = el;
+        kids[@(n.id)] = [NSMutableArray array];
+    }
+    for (const auto& n : nodes) {
+        NSAccessibilityElement* el = byId[@(n.id)];
+        NSAccessibilityElement* parent = (n.parentId >= 0) ? byId[@(n.parentId)] : nil;
+        if (parent) {
+            [el setAccessibilityParent:parent];
+            [kids[@(n.parentId)] addObject:el];
+        } else {
+            [el setAccessibilityParent:self];
+            [roots addObject:el];
+        }
+    }
+    for (NSNumber* key in byId) {
+        [byId[key] setAccessibilityChildren:kids[key]];
+    }
+    return roots;
+}
 
 @end

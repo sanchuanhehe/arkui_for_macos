@@ -53,6 +53,9 @@ template("ace_macos_source_set") {
 
     sources = [
       "WindowView.mm",
+      # M8 accessibility: bridge the ArkUI NG accessibility tree to NSAccessibility
+      # (VoiceOver / Accessibility Inspector); WindowView implements the protocol.
+      "mac_accessibility_bridge.mm",
       # M2 IME: real macOS TextInputConnectionImpl + MacTextInputBridge that drive
       # NSTextInputClient (on WindowView) into the focused ArkUI TextInput.
       "mac_text_input.mm",
