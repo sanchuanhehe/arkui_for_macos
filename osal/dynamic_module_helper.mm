@@ -34,6 +34,11 @@
 extern "C" void* OHOS_ACE_DynamicModule_Create_Menu();
 extern "C" void* OHOS_ACE_DynamicModule_Create_MenuItem();
 extern "C" void* OHOS_ACE_DynamicModule_Create_MenuItemGroup();
+// M6 form components: pattern + bridge statically linked into ace_macos (see
+// adapter/macos/build/BUILD.gn), reached via the static path instead of a dylib.
+extern "C" void* OHOS_ACE_DynamicModule_Create_Slider();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Checkbox();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Rating();
 
 namespace OHOS::Ace {
 namespace {
@@ -45,6 +50,9 @@ static NSString* FRAMEWORK_TYPE = @"framework";
 static std::unique_ptr<DynamicModule> g_menuModule = nullptr;
 static std::unique_ptr<DynamicModule> g_menuItemModule = nullptr;
 static std::unique_ptr<DynamicModule> g_menuItemGroupModule = nullptr;
+static std::unique_ptr<DynamicModule> g_sliderModule = nullptr;
+static std::unique_ptr<DynamicModule> g_checkboxModule = nullptr;
+static std::unique_ptr<DynamicModule> g_ratingModule = nullptr;
 
 // Initialize static modules
 void InitializeStaticModules()
@@ -54,6 +62,9 @@ void InitializeStaticModules()
         g_menuModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Menu()));
         g_menuItemModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_MenuItem()));
         g_menuItemGroupModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_MenuItemGroup()));
+        g_sliderModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Slider()));
+        g_checkboxModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Checkbox()));
+        g_ratingModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Rating()));
         LOGI("InitializeStaticModules finished");
     });
 }
@@ -114,6 +125,15 @@ DynamicModule* GetStaticModule(const std::string& name)
     }
     if (name == "MenuItemGroup") {
         return g_menuItemGroupModule.get();
+    }
+    if (name == "Slider") {
+        return g_sliderModule.get();
+    }
+    if (name == "Checkbox" || name == "CheckboxGroup") {
+        return g_checkboxModule.get();
+    }
+    if (name == "Rating") {
+        return g_ratingModule.get();
     }
     return nullptr;
 }

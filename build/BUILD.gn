@@ -50,6 +50,14 @@ ohos_executable("ace_macos") {
     # macos adapter via ace_lib.gni).
     "//foundation/arkui/ace_engine/build:libace_static_mac",
 
+    # M6: statically link the form components' pattern + bridge (DynamicModuleHelper
+    # soMap components). Static (not a dylib) so the single binary has one copy of the
+    # framework's C++ state (no divergence) and -dead_strip drops libace's unused
+    # dead-ref symbols — the wall that doomed the dylib/shared-libace approach.
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/slider:ace_core_components_slider_pattern_ng_mac",
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/checkbox:ace_core_components_checkbox_pattern_ng_mac",
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/rating:ace_core_components_rating_pattern_ng_mac",
+
     # Phase 0 path X (M1 link): the ArkTS VM file loader. js_pandafile_manager.o
     # (ets_runtime) references panda::panda_file::*/panda::Logger/panda::os::*;
     # those live in the libpanda* static libs which the ace group does not pull
