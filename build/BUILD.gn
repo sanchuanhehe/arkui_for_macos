@@ -59,6 +59,8 @@ ohos_executable("ace_macos") {
     "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/rating:ace_core_components_rating_pattern_ng_mac",
     "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/radio:ace_core_components_radio_pattern_ng_mac",
     "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/gauge:ace_core_components_gauge_pattern_ng_mac",
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/counter:ace_core_components_counter_pattern_ng_mac",
+    "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/stepper:ace_core_components_stepper_pattern_ng_mac",
 
     # Phase 0 path X (M1 link): the ArkTS VM file loader. js_pandafile_manager.o
     # (ets_runtime) references panda::panda_file::*/panda::Logger/panda::os::*;

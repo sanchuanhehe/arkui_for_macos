@@ -41,6 +41,9 @@ extern "C" void* OHOS_ACE_DynamicModule_Create_Checkbox();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Rating();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Radio();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Gauge();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Counter();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Stepper();
+extern "C" void* OHOS_ACE_DynamicModule_Create_StepperItem();
 
 namespace OHOS::Ace {
 namespace {
@@ -57,6 +60,9 @@ static std::unique_ptr<DynamicModule> g_checkboxModule = nullptr;
 static std::unique_ptr<DynamicModule> g_ratingModule = nullptr;
 static std::unique_ptr<DynamicModule> g_radioModule = nullptr;
 static std::unique_ptr<DynamicModule> g_gaugeModule = nullptr;
+static std::unique_ptr<DynamicModule> g_counterModule = nullptr;
+static std::unique_ptr<DynamicModule> g_stepperModule = nullptr;
+static std::unique_ptr<DynamicModule> g_stepperItemModule = nullptr;
 
 // Initialize static modules
 void InitializeStaticModules()
@@ -71,6 +77,9 @@ void InitializeStaticModules()
         g_ratingModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Rating()));
         g_radioModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Radio()));
         g_gaugeModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Gauge()));
+        g_counterModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Counter()));
+        g_stepperModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Stepper()));
+        g_stepperItemModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_StepperItem()));
         LOGI("InitializeStaticModules finished");
     });
 }
@@ -146,6 +155,15 @@ DynamicModule* GetStaticModule(const std::string& name)
     }
     if (name == "Gauge") {
         return g_gaugeModule.get();
+    }
+    if (name == "Counter") {
+        return g_counterModule.get();
+    }
+    if (name == "Stepper") {
+        return g_stepperModule.get();
+    }
+    if (name == "StepperItem") {
+        return g_stepperItemModule.get();
     }
     return nullptr;
 }
