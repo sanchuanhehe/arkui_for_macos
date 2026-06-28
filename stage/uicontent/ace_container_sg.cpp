@@ -759,6 +759,16 @@ void AceContainerSG::UpdateConfiguration(Platform::ParsedConfig& parsedConfig)
     pipelineContext_->NotifyConfigurationChange();
     pipelineContext_->FlushReload(configurationChange);
     pipelineContext_->FlushReloadTransition();
+    // ArkUI-X (macOS): drive the colorMode-change re-resolution path the same way the OHOS adapter does
+    // (ace_container.cpp UpdateColorMode). FlushReload re-applies theme tokens via OnColorConfigurationUpdate,
+    // but the per-component $r() ResourceObjects registered through Pattern::AddResObj are only re-resolved by
+    // NotifyColorModeChange -> rootNode tree walk -> Pattern::OnColorModeChange -> ReloadResources (which runs
+    // each updateFunc under ResourceParseUtils::SetNeedReload(true)). Without this, live dark-mode toggles leave
+    // $r() colors stuck at their light values even though the resmgr already resolves the dark qualifier.
+    if (configurationChange.colorModeUpdate) {
+        pipelineContext_->SetIsSystemColorChange(true);
+        pipelineContext_->NotifyColorModeChange(static_cast<uint32_t>(GetColorMode()));
+    }
 }
 
 void AceContainerSG::SetColor(Platform::ParsedConfig& parsedConfig, ConfigurationChange& configurationChange,

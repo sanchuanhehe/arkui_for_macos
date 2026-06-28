@@ -101,6 +101,10 @@ std::shared_ptr<Global::Resource::ResConfig> ConvertConfigToGlobal(const Resourc
     newResCfg->SetDirection(ConvertDirectionToGlobal(config.GetOrientation()));
     newResCfg->SetScreenDensity(config.GetDensity());
     newResCfg->SetColorMode(ConvertColorModeToGlobal(config.GetColorMode()));
+    // ArkUI-X (macOS): opt the app into colorMode adaptation. Without this, the resmgr's dark
+    // adaptation guard (IsColorModeMatch: DARK && !AppColorMode && !AppDarkRes) rejects every dark
+    // qualifier and forces light resources, so the native window never follows system dark mode.
+    newResCfg->SetAppColorMode(true);
     return newResCfg;
 }
 

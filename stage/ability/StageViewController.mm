@@ -106,7 +106,9 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
     // Phase 0 path X (M1 window): give the root view a real initial frame so the
     // hosting NSWindow does not collapse to a title-bar sliver. The window resizes
     // this view to its content rect, and the WindowView autoresizes to fill it.
-    _stageContainerView = [[StageContainerView alloc] initWithFrame:NSMakeRect(0, 0, 480, 800)];
+    // Keep this in sync with MacAppDelegate's window content rect (landscape desktop
+    // default); a mismatched VC view size drives the window via its content size.
+    _stageContainerView = [[StageContainerView alloc] initWithFrame:NSMakeRect(0, 0, 1024, 768)];
     _stageContainerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     self.view = _stageContainerView;
 }

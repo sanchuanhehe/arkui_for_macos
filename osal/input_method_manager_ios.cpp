@@ -15,6 +15,7 @@
 
 #include "adapter/ios/capability/editing/text_input_client_handler.h"
 #include "adapter/ios/capability/editing/text_input_connection_impl.h"
+#include "adapter/macos/entrance/mac_text_input.h"
 #include "core/common/container.h"
 #include "core/common/ime/input_method_manager.h"
 #include "core/common/ime/text_input_connection.h"
@@ -122,6 +123,13 @@ void InputMethodManager::SetEditingState(const TextEditingValue& value, int32_t 
     CHECK_NULL_VOID(connection);
     connection->SetEditingState(value, instanceId, needFireChangeEvent);
 }
+
+#if defined(MAC_PLATFORM)
+void InputMethodManager::UpdateCursorInfo(double left, double top, double width, double height)
+{
+    Platform::MacTextInputBridge::GetInstance().SetCaretWindowRect(left, top, width, height);
+}
+#endif
 
 void InputMethodManager::CloseKeyboard(int32_t instanceId)
 {

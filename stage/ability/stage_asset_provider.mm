@@ -445,7 +445,10 @@ std::string StageAssetProvider::GetTempDir()
 
 std::string StageAssetProvider::GetFilesDir()
 {
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    // Application Support, not Documents: macOS NSDocumentDirectory is ~/Documents,
+    // which triggers a TCC privacy prompt at launch; app private data belongs in
+    // ~/Library/Application Support (no prompt).
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *filesDirectory = [documentsDirectory stringByAppendingPathComponent:DOCUMENTS_SUBDIR_FILES];
     std::string filesDir = [filesDirectory UTF8String];
@@ -454,7 +457,10 @@ std::string StageAssetProvider::GetFilesDir()
 
 std::string StageAssetProvider::GetDatabaseDir()
 {
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    // Application Support, not Documents: macOS NSDocumentDirectory is ~/Documents,
+    // which triggers a TCC privacy prompt at launch; app private data belongs in
+    // ~/Library/Application Support (no prompt).
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *databaseDirectory = [documentsDirectory stringByAppendingPathComponent:DOCUMENTS_SUBDIR_DATABASE];
     std::string documentsDir = [documentsDirectory UTF8String];
@@ -476,7 +482,9 @@ std::string StageAssetProvider::GetResourceDir(const std::string& moduleName) co
         return "";
     }
     NSString *nsModuleName = GetOCstring(moduleName);
-    NSString *bundlePath = [NSBundle mainBundle].bundlePath;
+    // resourcePath, not bundlePath: in an .app resources live under Contents/Resources;
+    // for a bare exe resourcePath == bundlePath (the exe dir). See StageAssetManager.
+    NSString *bundlePath = [NSBundle mainBundle].resourcePath ?: [NSBundle mainBundle].bundlePath;
 
     NSString *resourceDir = [NSString stringWithFormat:@"%@/arkui-x/%@/resources/resfile", bundlePath, nsModuleName];
 
@@ -491,7 +499,10 @@ std::string StageAssetProvider::GetResourceDir(const std::string& moduleName) co
 
 std::string StageAssetProvider::GetAppDataModuleDir() const
 {
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    // Application Support, not Documents: macOS NSDocumentDirectory is ~/Documents,
+    // which triggers a TCC privacy prompt at launch; app private data belongs in
+    // ~/Library/Application Support (no prompt).
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSString *filesDirectory = [[documentsDirectory stringByAppendingPathComponent:@"files"]
                                                          stringByAppendingPathComponent:@"arkui-x"];    
@@ -518,7 +529,13 @@ bool StageAssetProvider::GetAppDataModuleAssetList(
     NSString *bundlePath = GetOCstring(path);
     NSFileManager *fileMgr = [NSFileManager defaultManager];
     BOOL isDirectroy = NO;
-    NSArray *moduleArray = [fileMgr subpathsOfDirectoryAtPath:bundlePath error:&error];    
+    // subpathsOfDirectoryAtPath: is RECURSIVE. Refuse a degenerate root ("", "/", or
+    // a relative path that resolves against cwd="/" under a GUI launch) so this never
+    // walks the whole disk and trips TCC folder/network-volume prompts.
+    if (bundlePath.length == 0 || [bundlePath isEqualToString:@"/"] || ![bundlePath hasPrefix:@"/"]) {
+        return false;
+    }
+    NSArray *moduleArray = [fileMgr subpathsOfDirectoryAtPath:bundlePath error:&error];
 
     if (error || moduleArray.count <= 0) {
         return false;

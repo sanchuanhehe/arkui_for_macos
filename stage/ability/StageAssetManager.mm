@@ -56,9 +56,29 @@ using AppMain = OHOS::AbilityRuntime::Platform::AppMain;
 - (void)moduleFilesWithbundleDirectory:(NSString *_Nonnull)bundleDirectory {
     NSError *error = nil;
     NSMutableArray *files = [[NSMutableArray alloc] init];
-    NSString *bundlePath = [NSString stringWithFormat:@"%@/%@", [NSBundle mainBundle].bundlePath, bundleDirectory];
+    // resourcePath, not bundlePath: inside an .app, resources must live under
+    // Contents/Resources (resourcePath); placing them at the bundle root leaves
+    // "unsealed contents" that break code signing, which makes macOS distrust the
+    // app and prompt for a pile of privacy permissions. For a bare executable
+    // resourcePath == bundlePath (the exe's dir), so this is transparent there.
+    NSString *resourceRoot = [NSBundle mainBundle].resourcePath ?: [NSBundle mainBundle].bundlePath;
+    // Refuse to scan from a degenerate root. subpathsOfDirectoryAtPath: below is
+    // RECURSIVE, so if resourceRoot were empty or "/" this would walk the whole disk
+    // (crossing ~/Desktop, ~/Downloads, mounted /Volumes, ...) and trip a cascade of
+    // TCC permission prompts. The real root is always a non-empty bundle path.
+    if (resourceRoot.length == 0 || [resourceRoot isEqualToString:@"/"]) {
+        LOGE("%{public}s invalid resource root, skipping module scan", __func__);
+        return;
+    }
+    NSString *bundlePath = [NSString stringWithFormat:@"%@/%@", resourceRoot, bundleDirectory];
     LOGI("%{public}s, \n bundlePath is : %{public}s", __func__, [bundlePath UTF8String]);
     self.bundlePath = bundlePath;
+    BOOL bundleIsDir = NO;
+    if ([bundlePath isEqualToString:@"/"] ||
+        ![[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:&bundleIsDir] || !bundleIsDir) {
+        LOGW("%{public}s bundlePath is not a real directory, skipping module scan", __func__);
+        return;
+    }
     NSArray *moduleArray = [[NSFileManager defaultManager] subpathsOfDirectoryAtPath:bundlePath error:&error];
     if (!error && moduleArray.count > 0) {
         for (NSString *subFile in moduleArray) {
@@ -262,7 +282,10 @@ using AppMain = OHOS::AbilityRuntime::Platform::AppMain;
 
 #pragma mark - private
 - (BOOL)createDocumentSubDirectoryAtPath:(NSString *)path {
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    // Application Support, not Documents: macOS NSDocumentDirectory is ~/Documents,
+    // which triggers a TCC privacy prompt at launch; app private data belongs in
+    // ~/Library/Application Support (no prompt).
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *documentsDirectory = [paths objectAtIndex:0];
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSError *error;

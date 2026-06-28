@@ -20,6 +20,27 @@
 
 #import <AppKit/AppKit.h>
 #import "MacAppDelegate.h"
+#include <unistd.h>
+
+// Pin cwd to the bundle resources as the VERY FIRST thing the process does, before
+// any framework / AbilityRuntime / napi-module init. A GUI .app launched via
+// LaunchServices starts with cwd = "/", and asset enumerations whose root resolves
+// relative to cwd then recurse the whole disk (crossing ~/Desktop, ~/Downloads,
+// ~/Pictures, mounted /Volumes, other apps' ~/Library), tripping a cascade of TCC
+// folder/network-volume permission prompts. This MUST be a constructor, not code in
+// main(): the executable links many static napi modules (each a __attribute__
+// ((constructor))) and its real entry point is not this file's main() (the bundled
+// AbilityRuntime provides one), so a chdir in main() never runs. constructor(101)
+// runs at dlopen time, before the default-priority module constructors.
+__attribute__((constructor(101))) static void ArkUIPinCwdToBundle(void)
+{
+    @autoreleasepool {
+        NSString* resourceRoot = [NSBundle mainBundle].resourcePath ?: [NSBundle mainBundle].bundlePath;
+        if (resourceRoot.length > 0) {
+            chdir(resourceRoot.fileSystemRepresentation);
+        }
+    }
+}
 
 int main(int argc, const char* argv[])
 {

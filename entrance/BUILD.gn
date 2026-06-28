@@ -53,6 +53,29 @@ template("ace_macos_source_set") {
 
     sources = [
       "WindowView.mm",
+      # M2 IME: real macOS TextInputConnectionImpl + MacTextInputBridge that drive
+      # NSTextInputClient (on WindowView) into the focused ArkUI TextInput.
+      "mac_text_input.mm",
+      # M2 IME: the platform TextInput delegate factory (Attach -> connection +
+      # SetCurrentConnection). Platform-agnostic; reused verbatim from iOS so the
+      # macOS connection above is what actually gets linked.
+      "$ace_root/adapter/ios/capability/editing/text_input_plugin.cpp",
+      # M2 IME: TextInputClientHandler::UpdateEditingValue routes the full editing
+      # value (text + caret) back to the focused TextInput on the UI thread. macOS
+      # uses the iOS/CROSS_PLATFORM full-value model so the caret tracks insertions.
+      "$ace_root/adapter/ios/capability/editing/text_input_client_handler.cpp",
+      # M4 clipboard: NSPasteboard-backed Clipboard (text path) + the platform-
+      # agnostic proxy factory reused from iOS (creates the macOS ClipboardImpl).
+      "$ace_root/adapter/macos/capability/clipboard/clipboard_impl.mm",
+      "$ace_root/adapter/ios/capability/clipboard/clipboard_proxy_impl.cpp",
+      # M4 storage: persistent key/value via NSUserDefaults. The iOS impl is pure
+      # Foundation (no UIKit), so it is reused verbatim on macOS.
+      "$ace_root/adapter/ios/capability/storage/storage_impl.mm",
+      "$ace_root/adapter/ios/capability/storage/storage_proxy_impl.cpp",
+      # M4 environment: NSWorkspace-backed accessibility state; replaces the null
+      # stub. The iOS proxy factory is reused (creates the macOS EnvironmentImpl).
+      "$ace_root/adapter/macos/capability/environment/environment_impl.mm",
+      "$ace_root/adapter/ios/capability/environment/environment_proxy_impl.cpp",
       # Phase 0 path X: macOS interaction shim (drag/InteractionInterface impl),
       # mirrors adapter/ios/entrance/interaction. Provides InteractionImpl so the
       # InteractionInterface singleton resolves at link.

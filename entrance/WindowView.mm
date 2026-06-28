@@ -48,6 +48,10 @@
 #include "hilog.h"
 #include "base/utils/time_util.h"
 #include "virtual_rs_window.h"
+#include "ace_pointer_data_packet.h"
+#include "core/event/key_event.h"
+#include "configuration.h"
+#include "adapter/macos/entrance/mac_text_input.h"
 
 namespace {
 // Match the iOS UITouchPhase ordering so synthetic-touch callers stay source
@@ -57,6 +61,17 @@ constexpr NSInteger TOUCH_PHASE_MOVED = 1;
 constexpr NSInteger TOUCH_PHASE_STATIONARY = 2;
 constexpr NSInteger TOUCH_PHASE_ENDED = 3;
 constexpr NSInteger TOUCH_PHASE_CANCELLED = 4;
+
+// NSString is UTF-16 internally; unichar == char16_t, so this is a direct copy.
+std::u16string NSStringToU16(NSString* s)
+{
+    if (s == nil || s.length == 0) {
+        return std::u16string();
+    }
+    std::u16string out(static_cast<size_t>(s.length), u'\0');
+    [s getCharacters:reinterpret_cast<unichar*>(out.data()) range:NSMakeRange(0, s.length)];
+    return out;
+}
 } // namespace
 
 #pragma mark - WindowGLLayer (FBO -> CALayer presentation)
@@ -245,6 +260,11 @@ constexpr NSInteger TOUCH_PHASE_CANCELLED = 4;
 
 #pragma mark - WindowView
 
+// M2 IME: conform to NSTextInputClient so the macOS input method (incl. CJK
+// composition) can drive the focused ArkUI TextInput via MacTextInputBridge.
+@interface WindowView () <NSTextInputClient>
+@end
+
 @implementation WindowView
 {
     std::weak_ptr<OHOS::Rosen::Window> _windowDelegate;
@@ -256,7 +276,14 @@ constexpr NSInteger TOUCH_PHASE_CANCELLED = 4;
     BOOL _needNotifyForground;
     BOOL _needNotifyFocus;
     int32_t _deviceId;
+    // M2 scroll: synthetic finger-pan session driven by scrollWheel: (trackpad / mouse wheel).
+    BOOL _scrollTouchActive;
+    CGFloat _scrollTouchX;
+    CGFloat _scrollTouchY;
     int32_t _pointerId;
+    // M2 IME: in-progress composition (marked text) shown by the input method
+    // before the user commits. Committed text arrives via insertText:.
+    NSMutableString* _markedText;
     std::vector<CGRect> hotAreas_;
     float _oldBrightness;
 
@@ -370,6 +397,26 @@ constexpr NSInteger TOUCH_PHASE_CANCELLED = 4;
         self.layer.contentsScale = scale;
     }
     [self setNeedsLayout:YES];
+}
+
+// M3 dark mode: AppKit calls this on the initial appearance and whenever the system toggles
+// light/dark. Map NSAppearance -> ArkUI's "ohos.system.colorMode" config so theme colors and
+// resources (systemres base vs dark) switch, then ArkUI re-applies the theme and repaints.
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
+    auto window = _windowDelegate.lock();
+    if (window == nullptr) {
+        return;
+    }
+    NSAppearanceName matched = [self.effectiveAppearance
+        bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    const bool isDark = [matched isEqualToString:NSAppearanceNameDarkAqua];
+    auto config = std::make_shared<OHOS::AbilityRuntime::Platform::Configuration>();
+    config->AddItem(OHOS::AbilityRuntime::Platform::ConfigurationInner::SYSTEM_COLORMODE,
+        isDark ? OHOS::AbilityRuntime::Platform::ConfigurationInner::COLOR_MODE_DARK
+               : OHOS::AbilityRuntime::Platform::ConfigurationInner::COLOR_MODE_LIGHT);
+    window->UpdateConfiguration(config);
 }
 
 - (void)setFullScreen:(BOOL)fullScreen
@@ -644,54 +691,393 @@ constexpr NSInteger TOUCH_PHASE_CANCELLED = 4;
 
 #pragma mark - Mouse events (replaces touchesBegan/Moved/Ended/Cancelled)
 
-// TODO M2: event dispatch. Mirror the iOS dispatchTouches path -- build an
-// AcePointerDataPacket from the NSEvent location (convertPoint:fromView:nil,
-// scaled by backingScaleFactor) and call window->ProcessPointerEvent(...).
-// macOS reports a single mouse pointer (pointer/device id 0).
+// M2 event dispatch. Mirror the iOS dispatchTouches path: build an
+// AcePointerDataPacket from the NSEvent location and call window->ProcessPointerEvent(...).
+// macOS reports a single mouse pointer (pointer/device id 0). NSView's default
+// coordinate system is top-left origin because WindowView overrides isFlipped (YES).
+- (void)dispatchMouseEvent:(NSEvent*)event
+                    action:(OHOS::Ace::Platform::AcePointerData::PointerAction)action
+{
+    auto window = _windowDelegate.lock();
+    if (window == nullptr) {
+        return;
+    }
+    const CGFloat scale = self.window.backingScaleFactor > 0 ? self.window.backingScaleFactor : 1.0;
+    const NSPoint inView = [self convertPoint:event.locationInWindow fromView:nil];
+    const CGFloat xPx = inView.x * scale;
+    // WindowView overrides isFlipped (YES), so convertPoint already yields a top-left-origin
+    // point. Use inView.y directly -- subtracting from height here double-flipped it (taps landed
+    // mirrored vertically and drag-scroll went the wrong way).
+    const CGFloat yPx = inView.y * scale;
+
+    OHOS::Ace::Platform::AcePointerData pd;
+    pd.Clear();
+    pd.pointer_id = 0;
+    pd.device_id = 0;
+    pd.time_stamp = OHOS::Ace::GetMicroTickCount();
+    pd.finger_count = 1;
+    pd.pointer_action = action;
+    // Report as a finger touch: macOS emulates a single touch pointer, and ArkUI's scrollable
+    // containers (List/Scroll) recognize pan-to-scroll from Touch, not Mouse, drags.
+    pd.tool_type = OHOS::Ace::Platform::AcePointerData::ToolType::Touch;
+    pd.display_x = xPx;
+    pd.display_y = yPx;
+    pd.window_x = xPx;
+    pd.window_y = yPx;
+    pd.pressure = (action == OHOS::Ace::Platform::AcePointerData::PointerAction::kUped) ? 0.0 : 1.0;
+    pd.actionPoint = true;
+
+    OHOS::Ace::Platform::AcePointerDataPacket packet(1);
+    packet.SetPointerData(0, pd);
+    window->ProcessPointerEvent(packet.data());
+}
 
 - (void)mouseDown:(NSEvent*)event
 {
-    // TODO M2: event dispatch (UITouchPhaseBegan analogue)
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kDowned];
 }
 
 - (void)mouseDragged:(NSEvent*)event
 {
-    // TODO M2: event dispatch (UITouchPhaseMoved analogue)
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kMoved];
 }
 
 - (void)mouseUp:(NSEvent*)event
 {
-    // TODO M2: event dispatch (UITouchPhaseEnded analogue)
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kUped];
 }
 
 - (void)rightMouseDown:(NSEvent*)event
 {
-    // TODO M2: event dispatch (secondary button)
+    // Secondary button: routed as a primary pointer for now (context menu handling is M6/M3 work).
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kDowned];
 }
 
 - (void)rightMouseDragged:(NSEvent*)event
 {
-    // TODO M2: event dispatch (secondary button drag)
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kMoved];
 }
 
 - (void)rightMouseUp:(NSEvent*)event
 {
-    // TODO M2: event dispatch (secondary button up)
+    [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kUped];
+}
+
+#pragma mark - Scroll wheel (trackpad / mouse wheel -> synthetic finger pan)
+
+// Dispatch one synthetic Touch pointer at explicit physical-pixel coordinates.
+- (void)dispatchTouchAtPixelX:(CGFloat)xPx pixelY:(CGFloat)yPx
+                       action:(OHOS::Ace::Platform::AcePointerData::PointerAction)action
+{
+    auto window = _windowDelegate.lock();
+    if (window == nullptr) {
+        return;
+    }
+    OHOS::Ace::Platform::AcePointerData pd;
+    pd.Clear();
+    pd.pointer_id = 0;
+    pd.device_id = 0;
+    pd.time_stamp = OHOS::Ace::GetMicroTickCount();
+    pd.finger_count = 1;
+    pd.pointer_action = action;
+    pd.tool_type = OHOS::Ace::Platform::AcePointerData::ToolType::Touch;
+    pd.display_x = xPx;
+    pd.display_y = yPx;
+    pd.window_x = xPx;
+    pd.window_y = yPx;
+    pd.pressure = (action == OHOS::Ace::Platform::AcePointerData::PointerAction::kUped) ? 0.0 : 1.0;
+    pd.actionPoint = true;
+    OHOS::Ace::Platform::AcePointerDataPacket packet(1);
+    packet.SetPointerData(0, pd);
+    window->ProcessPointerEvent(packet.data());
+}
+
+// ArkUI scrollables recognize pan-to-scroll from a Touch drag, not a scroll axis (the axis path
+// is unwired on mac). Translate scrollWheel: into a continuous synthetic finger pan: press on the
+// gesture's first event, drag by the accumulated scroll delta, release when it ends (incl. momentum).
+- (void)scrollWheel:(NSEvent*)event
+{
+    using PointerAction = OHOS::Ace::Platform::AcePointerData::PointerAction;
+    const CGFloat scale = self.window.backingScaleFactor > 0 ? self.window.backingScaleFactor : 1.0;
+    const NSPoint inView = [self convertPoint:event.locationInWindow fromView:nil];
+    const CGFloat xPx = inView.x * scale;
+    const CGFloat yPx = inView.y * scale; // view isFlipped -> already top-left origin
+
+    CGFloat deltaY = event.scrollingDeltaY;
+    if (deltaY == 0.0 && event.deltaY != 0.0) {
+        deltaY = event.deltaY * 10.0; // legacy line-based mouse wheel
+    }
+    // Finger pan that matches macOS scrolling: scrollingDeltaY already honours the user's "natural
+    // scrolling" setting (it is the content delta). A Touch drag moves content with the finger, so
+    // the finger delta equals the content delta -> map straight through.
+    const CGFloat dyPx = deltaY * scale;
+
+    const NSEventPhase phase = event.phase;
+    const NSEventPhase momentum = event.momentumPhase;
+
+    if (phase == NSEventPhaseNone && momentum == NSEventPhaseNone) {
+        // Legacy mouse wheel: discrete one-shot micro-pan.
+        if (deltaY == 0.0) {
+            return;
+        }
+        [self dispatchTouchAtPixelX:xPx pixelY:yPx action:PointerAction::kDowned];
+        [self dispatchTouchAtPixelX:xPx pixelY:yPx + dyPx action:PointerAction::kMoved];
+        [self dispatchTouchAtPixelX:xPx pixelY:yPx + dyPx action:PointerAction::kUped];
+        return;
+    }
+
+    if (phase == NSEventPhaseBegan) {
+        _scrollTouchActive = YES;
+        _scrollTouchX = xPx;
+        _scrollTouchY = yPx;
+        [self dispatchTouchAtPixelX:_scrollTouchX pixelY:_scrollTouchY action:PointerAction::kDowned];
+        return;
+    }
+    if (_scrollTouchActive && (phase == NSEventPhaseChanged || momentum == NSEventPhaseChanged)) {
+        _scrollTouchY += dyPx;
+        [self dispatchTouchAtPixelX:_scrollTouchX pixelY:_scrollTouchY action:PointerAction::kMoved];
+        return;
+    }
+    const BOOL phaseEndedNoMomentum = (phase == NSEventPhaseEnded || phase == NSEventPhaseCancelled) &&
+                                      momentum == NSEventPhaseNone;
+    if (_scrollTouchActive && (phaseEndedNoMomentum || momentum == NSEventPhaseEnded ||
+                               momentum == NSEventPhaseCancelled)) {
+        [self dispatchTouchAtPixelX:_scrollTouchX pixelY:_scrollTouchY action:PointerAction::kUped];
+        _scrollTouchActive = NO;
+    }
 }
 
 #pragma mark - Key events (replaces pressesBegan/Ended)
 
+namespace {
+// Window::ProcessKeyEvent feeds keyCode through KeyCodeToAceKeyCode(), which is keyed on
+// USB-HID usage codes (the iOS path passes UIKeyboardHIDUsage). macOS NSEvent.keyCode is a
+// kVK_* virtual keycode, a different namespace -- translate it to the HID usage code here.
+int32_t MacVirtualKeyToHidUsage(unsigned short vk)
+{
+    switch (vk) {
+        // Letters (kVK_ANSI_A..Z -> HID 4..29)
+        case 0x00: return 4;  case 0x0B: return 5;  case 0x08: return 6;  case 0x02: return 7;
+        case 0x0E: return 8;  case 0x03: return 9;  case 0x05: return 10; case 0x04: return 11;
+        case 0x22: return 12; case 0x26: return 13; case 0x28: return 14; case 0x25: return 15;
+        case 0x2E: return 16; case 0x2D: return 17; case 0x1F: return 18; case 0x23: return 19;
+        case 0x0C: return 20; case 0x0F: return 21; case 0x01: return 22; case 0x11: return 23;
+        case 0x20: return 24; case 0x09: return 25; case 0x0D: return 26; case 0x07: return 27;
+        case 0x10: return 28; case 0x06: return 29;
+        // Digits 1..0 (kVK_ANSI_1..0 -> HID 30..39)
+        case 0x12: return 30; case 0x13: return 31; case 0x14: return 32; case 0x15: return 33;
+        case 0x17: return 34; case 0x16: return 35; case 0x1A: return 36; case 0x1C: return 37;
+        case 0x19: return 38; case 0x1D: return 39;
+        // Control / punctuation
+        case 0x24: return 40; // Return
+        case 0x35: return 41; // Escape
+        case 0x33: return 42; // Delete (backspace)
+        case 0x30: return 43; // Tab
+        case 0x31: return 44; // Space
+        case 0x1B: return 45; // Minus
+        case 0x18: return 46; // Equal
+        case 0x21: return 47; // LeftBracket
+        case 0x1E: return 48; // RightBracket
+        case 0x2A: return 49; // Backslash
+        case 0x29: return 51; // Semicolon
+        case 0x27: return 52; // Quote
+        case 0x32: return 53; // Grave
+        case 0x2B: return 54; // Comma
+        case 0x2F: return 55; // Period
+        case 0x2C: return 56; // Slash
+        // Navigation
+        case 0x7B: return 80; // Left
+        case 0x7C: return 79; // Right
+        case 0x7D: return 81; // Down
+        case 0x7E: return 82; // Up
+        case 0x75: return 76; // ForwardDelete
+        case 0x73: return 74; // Home
+        case 0x77: return 77; // End
+        case 0x74: return 75; // PageUp
+        case 0x79: return 78; // PageDown
+        default:   return 0;
+    }
+}
+
+// Modifier bitmask expected by ProcessKeyEvent (matches the iOS GetModifierKeys: ctrl/shift/alt/meta).
+int32_t MacModifierBits(NSEventModifierFlags flags)
+{
+    int32_t bits = 0;
+    // Bits match CtrlKeysBit: CTRL=1, SHIFT=2, ALT=4, META=8. macOS Command maps to
+    // META, which is what the platform editing shortcuts (KeyComb(KEY_V, KEY_META)
+    // etc., guarded by MAC_PLATFORM in text_input_client) expect.
+    if (flags & NSEventModifierFlagControl) { bits |= 1; }
+    if (flags & NSEventModifierFlagShift)   { bits |= 2; }
+    if (flags & NSEventModifierFlagOption)  { bits |= 4; }
+    if (flags & NSEventModifierFlagCommand) { bits |= 8; }
+    return bits;
+}
+} // namespace
+
+- (void)dispatchKeyEvent:(NSEvent*)event action:(OHOS::Ace::KeyAction)action
+{
+    auto window = _windowDelegate.lock();
+    if (window == nullptr) {
+        return;
+    }
+    const int32_t hidUsage = MacVirtualKeyToHidUsage(event.keyCode);
+    if (hidUsage == 0) {
+        return;
+    }
+    const int64_t ts = OHOS::Ace::GetMicroTickCount();
+    const int32_t repeatTime = (action == OHOS::Ace::KeyAction::DOWN && event.isARepeat) ? 1 : 0;
+    window->ProcessKeyEvent(hidUsage, static_cast<int32_t>(action), repeatTime, ts, ts,
+        MacModifierBits(event.modifierFlags));
+}
+
 - (void)keyDown:(NSEvent*)event
 {
-    // TODO M2: event dispatch. Map NSEvent.keyCode + modifierFlags to
-    // window->ProcessKeyEvent(keyCode, KeyAction::DOWN, ...). macOS auto-repeat
-    // is available via event.isARepeat, so the iOS dispatch-source repeat timer
-    // is not needed.
+    // When a text field is focused, hand the key to the input method so it can
+    // build composition / committed text (insertText:) and emit edit commands
+    // (doCommandBySelector:). Otherwise dispatch the raw key for shortcuts/nav.
+    // Command/Control shortcuts (Cmd+C/V/X/A/Z ...) must reach ArkUI's key handling
+    // as raw key events, not the input method -- otherwise interpretKeyEvents would
+    // turn e.g. Cmd+V into the literal text "v". Route any Command/Control-modified
+    // key down the raw path.
+    const BOOL hasShortcutModifier =
+        (event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) != 0;
+    if (!hasShortcutModifier && OHOS::Ace::Platform::MacTextInputBridge::GetInstance().IsActive()) {
+        // Still forward non-text keys (arrows, enter, etc.) to ArkUI for caret
+        // movement / submit, but let the IME consume printable + composing input.
+        [self interpretKeyEvents:@[ event ]];
+        return;
+    }
+    [self dispatchKeyEvent:event action:OHOS::Ace::KeyAction::DOWN];
 }
 
 - (void)keyUp:(NSEvent*)event
 {
-    // TODO M2: event dispatch -> window->ProcessKeyEvent(..., KeyAction::UP, ...)
+    [self dispatchKeyEvent:event action:OHOS::Ace::KeyAction::UP];
+}
+
+#pragma mark - NSTextInputClient (M2 IME)
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange
+{
+    NSString* text = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+    // Committing text ends any active composition.
+    [_markedText setString:@""];
+    OHOS::Ace::Platform::MacTextInputBridge::GetInstance().CommitText(NSStringToU16(text));
+}
+
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange
+{
+    NSString* text = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+    if (_markedText == nil) {
+        _markedText = [[NSMutableString alloc] init];
+    }
+    [_markedText setString:(text ?: @"")];
+    // Composition is shown by the IME's own candidate window; the in-progress
+    // string is not pushed to the field until committed via insertText:.
+}
+
+- (void)unmarkText
+{
+    [_markedText setString:@""];
+    OHOS::Ace::Platform::MacTextInputBridge::GetInstance().PerformAction();
+}
+
+- (NSRange)selectedRange
+{
+    auto& bridge = OHOS::Ace::Platform::MacTextInputBridge::GetInstance();
+    NSInteger start = bridge.GetSelStart();
+    NSInteger len = bridge.GetSelEnd() - bridge.GetSelStart();
+    if (start < 0) {
+        return NSMakeRange(NSNotFound, 0);
+    }
+    return NSMakeRange(static_cast<NSUInteger>(start), static_cast<NSUInteger>(len < 0 ? 0 : len));
+}
+
+- (NSRange)markedRange
+{
+    if (_markedText.length > 0) {
+        return NSMakeRange(0, _markedText.length);
+    }
+    return NSMakeRange(NSNotFound, 0);
+}
+
+- (BOOL)hasMarkedText
+{
+    return _markedText.length > 0;
+}
+
+- (nullable NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
+                                                        actualRange:(nullable NSRangePointer)actualRange
+{
+    return nil;
+}
+
+- (NSArray<NSAttributedStringKey>*)validAttributesForMarkedText
+{
+    return @[];
+}
+
+- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(nullable NSRangePointer)actualRange
+{
+    // Anchor the IME candidate window at the caret. ArkUI pushes the caret rect in
+    // window pixels (top-left origin) via MacTextInputBridge; convert to view points
+    // (the view is flipped, so it shares ArkUI's top-left origin), then to screen.
+    double cx = 0, cy = 0, cw = 0, ch = 0;
+    if (OHOS::Ace::Platform::MacTextInputBridge::GetInstance().GetCaretWindowRect(cx, cy, cw, ch)) {
+        CGFloat scale = [self currentBackingScale];
+        if (scale <= 0.0) {
+            scale = 1.0;
+        }
+        // Candidate window sits just below the caret; give it the caret's height.
+        NSRect viewRect = NSMakeRect(cx / scale, cy / scale, (cw > 0 ? cw : 1) / scale, (ch > 0 ? ch : 16) / scale);
+        NSRect winRect = [self convertRect:viewRect toView:nil];
+        return [self.window convertRectToScreen:winRect];
+    }
+    // Fallback: view origin, so composition is still usable before the first push.
+    NSRect viewRect = NSMakeRect(0, 0, 1, 16);
+    NSRect winRect = [self convertRect:viewRect toView:nil];
+    return [self.window convertRectToScreen:winRect];
+}
+
+- (NSUInteger)characterIndexForPoint:(NSPoint)point
+{
+    return NSNotFound;
+}
+
+- (void)doCommandBySelector:(SEL)selector
+{
+    auto& bridge = OHOS::Ace::Platform::MacTextInputBridge::GetInstance();
+    if (selector == @selector(deleteBackward:)) {
+        bridge.DeleteBackward(1);
+        return;
+    }
+    if (selector == @selector(insertNewline:)) {
+        bridge.PerformAction();
+        return;
+    }
+    // Caret navigation: ArkUI's key handling moves the visible caret, but the
+    // shadow caret in MacTextInputBridge must move in lockstep so the next inserted
+    // character lands at the right offset. Mirror the same logical move here, then
+    // forward the raw key so the field actually repositions its caret.
+    const int32_t caret = bridge.GetSelStart();
+    const int32_t len = static_cast<int32_t>(bridge.GetMirror().length());
+    if (selector == @selector(moveLeft:) || selector == @selector(moveLeftAndModifySelection:) ||
+        selector == @selector(moveBackward:)) {
+        bridge.SetCaret(caret - 1);
+    } else if (selector == @selector(moveRight:) || selector == @selector(moveRightAndModifySelection:) ||
+        selector == @selector(moveForward:)) {
+        bridge.SetCaret(caret + 1);
+    } else if (selector == @selector(moveToBeginningOfLine:) || selector == @selector(moveToLeftEndOfLine:) ||
+        selector == @selector(moveToBeginningOfDocument:)) {
+        bridge.SetCaret(0);
+    } else if (selector == @selector(moveToEndOfLine:) || selector == @selector(moveToRightEndOfLine:) ||
+        selector == @selector(moveToEndOfDocument:)) {
+        bridge.SetCaret(len);
+    }
+    NSEvent* current = [NSApp currentEvent];
+    if (current != nil && current.type == NSEventTypeKeyDown) {
+        [self dispatchKeyEvent:current action:OHOS::Ace::KeyAction::DOWN];
+    }
 }
 
 #pragma mark - Synthetic touch injection

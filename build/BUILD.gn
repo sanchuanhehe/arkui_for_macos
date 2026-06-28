@@ -21,6 +21,7 @@
 
 import("//build/ohos.gni")
 import("//foundation/arkui/ace_engine/ace_config.gni")
+import("//foundation/arkui/ace_engine/interfaces/napi/kits/napi_lib.gni")
 
 ohos_executable("ace_macos") {
   sources = [
@@ -59,6 +60,53 @@ ohos_executable("ace_macos") {
     # Phase 0 path X (M1 link): ace_kit provides the theme TokenColors/TokenTheme
     # and Kit::UIContext/ContentModifier symbols (rendering uses theme tokens).
     "//foundation/arkui/ace_engine/interfaces/inner_api/ace_kit:ace_kit",
+
+  ]
+
+  # M7 NAPI coverage: statically link every @ohos.* kit in common_napi_libs into
+  # ace_macos. Each kit self-registers via an __attribute__((constructor)); since
+  # these are ohos_source_set objects linked directly into the exe (no archive
+  # dead-strip), the registration runs at startup and the NativeModuleManager
+  # resolves require('@ohos.*') without a dylib. Mirrors the iOS aggregation in
+  # adapter/ios/build/BUILD.gn (which links the same _static_<platform> source sets).
+  # Exclude kits that redefine symbols already present once we statically link into
+  # a single executable (iOS keeps each in its own dylib, so they never collide):
+  #   prompt          - shares prompt_action.cpp with promptaction (kept); duplicate
+  #   componentutils  - recompiles base/geometry (matrix4.* etc.) already in libace
+  #   drag_controller - same base-source overlap with libace
+  #   animator        - pulls a duplicate of the above shared geometry source
+  napi_exclude_mac = [
+    # prompt duplicates promptaction's prompt_action.cpp; promptaction is kept.
+    "prompt",
+
+    # drawabledescriptor's GetSingleParam / ShadowInfoCore collide with copies
+    # already linked via libace's inner_api/drawable_descriptor.
+    "drawabledescriptor",
+  ]
+  foreach(module, common_napi_libs) {
+    module_path_names = []
+    module_path_names = string_split(module, "/")
+    prefix_dir = module_path_names[0]
+    module_path = prefix_dir
+    if (prefix_dir != module) {
+      module_path = module_path_names[1]
+    }
+    if (filter_include([ module_path ], napi_exclude_mac) == []) {
+      module_name_ext = string_replace(module_path, "_", "")
+      deps += [ "$ace_root/interfaces/napi/kits/${module_path}:${module_name_ext}_static_mac" ]
+    }
+  }
+
+  # M8 plugins subsystem (i18n/intl): self-register via __attribute__((constructor))
+  # I18nRegister/IntlRegister → napi_module_register, the SAME mechanism as the M7
+  # napi kits above. Static-link as ohos_source_set so the constructor survives the
+  # link (no archive dead-strip on directly-linked objects). Crucially, dead-strip
+  # still DROPS their unused libace transitive deps — the 123 dead-ref symbols
+  # (RSRenderServiceClient / ImageAnalyzerMgr overloads) that doomed the dylib +
+  # flat-namespace approach (which forced resolution of every dead ref at load).
+  deps += [
+    "//plugins/i18n:i18n_static_mac",
+    "//plugins/intl:intl_static_mac",
   ]
 
   frameworks = [

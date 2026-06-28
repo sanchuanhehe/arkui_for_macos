@@ -34,6 +34,11 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification*)notification
 {
+    // cwd is pinned to the bundle resources by a constructor(101) in main.mm (runs
+    // before any AbilityRuntime / napi-module init, which a delegate method cannot),
+    // so relative asset enumerations stay inside the bundle instead of recursing the
+    // whole disk and tripping TCC prompts.
+
     // 1. Configure the .abc / module bundle and start AbilityRuntime.
     [StageApplication configModuleWithBundleDirectory:BUNDLE_DIRECTORY];
     [StageApplication launchApplication];
@@ -44,8 +49,10 @@
     StageViewController* rootVC =
         [[StageViewController alloc] initWithInstanceName:instanceName];
 
-    // 3. Host it in a regular titled NSWindow.
-    NSRect frame = NSMakeRect(0, 0, 480, 800);
+    // 3. Host it in a regular titled NSWindow. Default to a landscape desktop size
+    // (wider than tall) so the app looks like a native macOS window rather than a
+    // portrait phone simulator.
+    NSRect frame = NSMakeRect(0, 0, 1024, 768);
     NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
                        NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
     self.window = [[NSWindow alloc] initWithContentRect:frame

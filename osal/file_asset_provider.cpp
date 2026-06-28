@@ -123,9 +123,20 @@ std::string FileAssetProvider::GetAssetPath(const std::string& assetName, bool)
 
 void FileAssetProvider::GetAssetList(const std::string& path, std::vector<std::string>& assetList)
 {
+    // Guard against a degenerate root. If packagePath_ is unset the opendir below
+    // resolves relative to cwd, which under a LaunchServices GUI launch is "/", so
+    // a recursive caller would enumerate the entire disk and trip a cascade of TCC
+    // folder/network-volume prompts. Refuse to enumerate without a real package root.
+    if (packagePath_.empty()) {
+        return;
+    }
     for (const auto& basePath : assetBasePaths_) {
         DIR* dp = nullptr;
         auto openDir = packagePath_ + basePath + path;
+        // Never enumerate "" or the filesystem root.
+        if (openDir.empty() || openDir == "/") {
+            continue;
+        }
         if (nullptr == (dp = opendir(openDir.c_str()))) {
             continue;
         }

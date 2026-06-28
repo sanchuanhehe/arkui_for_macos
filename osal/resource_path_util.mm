@@ -19,13 +19,19 @@
 namespace OHOS::Ace {
 std::string ResourcePathUtil::GetBundlePath()
 {
-    NSString* bundlePath = [NSString stringWithFormat:@"%@/%@", [NSBundle mainBundle].bundlePath, @"arkui-x"];
+    // resourcePath, not bundlePath: in an .app resources live under Contents/Resources;
+    // for a bare exe resourcePath == bundlePath (the exe dir). See StageAssetManager.
+    NSString* resourceRoot = [NSBundle mainBundle].resourcePath ?: [NSBundle mainBundle].bundlePath;
+    NSString* bundlePath = [NSString stringWithFormat:@"%@/%@", resourceRoot, @"arkui-x"];
     return [bundlePath UTF8String];
 }
 
 std::string ResourcePathUtil::GetSandboxPath()
 {
-    NSArray* paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    // Application Support, not Documents: on macOS NSDocumentDirectory is the user's
+    // ~/Documents, which triggers a TCC privacy prompt on every app launch. App
+    // private data belongs in ~/Library/Application Support (no prompt).
+    NSArray* paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString* documentsDirectory = [paths objectAtIndex:0];
     NSString* bundlePath = [NSString stringWithFormat:@"%@/%@/%@", documentsDirectory, @"files", @"arkui-x"];
     return [bundlePath UTF8String];

@@ -194,10 +194,8 @@ std::vector<uint8_t>& MultiTypeRecordImpl::GetSpanStringBuffer()
 
 namespace OHOS::Ace {
 
-DownloadManager* DownloadManager::GetInstance()
-{
-    return nullptr;
-}
+// DownloadManager::GetInstance() is now implemented in download_manager_mac.mm (NSURLSession),
+// enabling URL image / network downloads. It is intentionally NOT stubbed here.
 
 RefPtr<FoldableWindow> FoldableWindow::CreateFoldableWindow(int32_t /*instanceId*/)
 {
@@ -301,37 +299,16 @@ std::shared_ptr<IPickerAudioHaptic> PickerAudioHapticFactory::GetInstance(
 
 namespace Platform {
 
-EnvironmentProxyImpl* EnvironmentProxyImpl::GetInstance()
-{
-    return nullptr;
-}
+// EnvironmentProxyImpl::GetInstance/GetEnvironment now come from the iOS
+// environment_proxy_impl.cpp compiled into the macOS build, backed by the
+// NSWorkspace EnvironmentImpl in adapter/macos/capability/environment.
 
-RefPtr<Environment> EnvironmentProxyImpl::GetEnvironment(const RefPtr<TaskExecutor>& /*taskExecutor*/) const
-{
-    return nullptr;
-}
-
-// DECLARE_SINGLETON makes the ctor/dtor private (declared only); define them.
-TextInputClientHandler::TextInputClientHandler() = default;
-TextInputClientHandler::~TextInputClientHandler() = default;
-
-// TextInputConnectionImpl's real (UIKit) impl lives in the .mm; provide an inert
-// one (ctor + all virtual overrides so the vtable is complete).
-TextInputConnectionImpl::TextInputConnectionImpl(const WeakPtr<TextInputClient>& client,
-    const RefPtr<TaskExecutor>& taskExecutor, const TextInputConfiguration& /*config*/)
-    : TextInputConnection(client, taskExecutor)
-{
-}
-void TextInputConnectionImpl::Show(bool /*isFocusViewChanged*/, int32_t /*instanceId*/) {}
-void TextInputConnectionImpl::SetEditingState(
-    const TextEditingValue& /*value*/, int32_t /*instanceId*/, bool /*needFireChangeEvent*/) {}
-void TextInputConnectionImpl::Close(int32_t /*instanceId*/) {}
-void TextInputConnectionImpl::FinishComposing(int32_t /*instanceId*/) {}
+// The real macOS TextInputConnectionImpl (driving NSTextInputClient via
+// MacTextInputBridge) lives in adapter/macos/entrance/mac_text_input.mm. The
+// TextInputClientHandler ctor/dtor, singleton and UpdateEditingValue/PerformAction
+// now come from the iOS text_input_client_handler.cpp compiled into the macOS
+// entrance, so they are no longer stubbed here (would duplicate those symbols).
 
 } // namespace Platform
-
-// Singleton<TextInputClientHandler>::GetInstance() (SINGLETON_INSTANCE_IMPL).
-// Must sit inside OHOS::Ace: the macro expands the unqualified `Singleton<...>`.
-SINGLETON_INSTANCE_IMPL(Platform::TextInputClientHandler);
 
 } // namespace OHOS::Ace

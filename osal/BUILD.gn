@@ -35,6 +35,7 @@ template("ace_osal_macos_source_set") {
       # symbols (DynamicModule menu factories, accessibility/log OC bridge, skia
       # SkDebugf/SkFontMgr port). Lets ace_macos link and open a window.
       "mac_link_stubs.cpp",
+      "download_manager_mac.mm",
       "accessibility_event_manager.cpp",
       "accessibility_manager_impl.cpp",
       "ace_checker.cpp",

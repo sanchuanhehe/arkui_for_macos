@@ -16,8 +16,18 @@
 #import <AppKit/AppKit.h>
 #import "StageConfigurationManager.h"
 
+#include <mutex>
 #include <string>
 #include <app_main.h>
+
+#include "adapter/ios/capability/clipboard/clipboard_proxy_impl.h"
+#include "adapter/ios/capability/editing/text_input_plugin.h"
+#include "adapter/ios/capability/environment/environment_proxy_impl.h"
+#include "adapter/ios/capability/storage/storage_proxy_impl.h"
+#include "core/common/clipboard/clipboard_proxy.h"
+#include "core/common/environment/environment_proxy.h"
+#include "core/common/ime/text_input_proxy.h"
+#include "core/common/storage/storage_proxy.h"
 
 #define APPLICATION_DIRECTION @"ohos.application.direction"
 #define COLOR_MODE_LIGHT @"light"
@@ -64,7 +74,25 @@ using AppMain = OHOS::AbilityRuntime::Platform::AppMain;
         AppMain::GetInstance()->InitConfiguration(EMPTY_JSON);
     }
     AppMain::GetInstance()->InitConfiguration(json);
-    // macOS: CapabilityRegistry::Register() not part of the macOS M1 entrance; dropped.
+    // M2 IME: register the platform text-input delegate so a focused TextInput can
+    // Attach() a connection. Without a delegate TextInputProxy::Attach returns null
+    // and no keyboard/IME ever connects. (Other capability delegates remain a
+    // follow-up; this is the minimal registration needed for text input.)
+    static std::once_flag imeDelegateFlag;
+    std::call_once(imeDelegateFlag, [] {
+        OHOS::Ace::TextInputProxy::GetInstance().SetDelegate(
+            std::make_unique<OHOS::Ace::Platform::TextInputPlugin>());
+        // M4: NSPasteboard-backed clipboard so TextInput copy/paste works.
+        OHOS::Ace::ClipboardProxy::GetInstance()->SetDelegate(
+            std::make_unique<OHOS::Ace::Platform::ClipboardProxyImpl>());
+        // M4: NSUserDefaults-backed persistent storage (PersistentStorage /
+        // @ohos.data.storage).
+        OHOS::Ace::StorageProxy::GetInstance()->SetDelegate(
+            std::make_unique<OHOS::Ace::Platform::StorageProxyImpl>());
+        // M4: NSWorkspace-backed environment (accessibility state).
+        OHOS::Ace::EnvironmentProxy::GetInstance()->SetDelegate(
+            std::make_unique<OHOS::Ace::Platform::EnvironmentProxyImpl>());
+    });
 }
 
 - (void)directionUpdate:(NSInteger)direction {
