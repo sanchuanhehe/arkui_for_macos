@@ -39,6 +39,8 @@ extern "C" void* OHOS_ACE_DynamicModule_Create_MenuItemGroup();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Slider();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Checkbox();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Rating();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Radio();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Gauge();
 
 namespace OHOS::Ace {
 namespace {
@@ -53,6 +55,8 @@ static std::unique_ptr<DynamicModule> g_menuItemGroupModule = nullptr;
 static std::unique_ptr<DynamicModule> g_sliderModule = nullptr;
 static std::unique_ptr<DynamicModule> g_checkboxModule = nullptr;
 static std::unique_ptr<DynamicModule> g_ratingModule = nullptr;
+static std::unique_ptr<DynamicModule> g_radioModule = nullptr;
+static std::unique_ptr<DynamicModule> g_gaugeModule = nullptr;
 
 // Initialize static modules
 void InitializeStaticModules()
@@ -65,6 +69,8 @@ void InitializeStaticModules()
         g_sliderModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Slider()));
         g_checkboxModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Checkbox()));
         g_ratingModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Rating()));
+        g_radioModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Radio()));
+        g_gaugeModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Gauge()));
         LOGI("InitializeStaticModules finished");
     });
 }
@@ -134,6 +140,12 @@ DynamicModule* GetStaticModule(const std::string& name)
     }
     if (name == "Rating") {
         return g_ratingModule.get();
+    }
+    if (name == "Radio") {
+        return g_radioModule.get();
+    }
+    if (name == "Gauge") {
+        return g_gaugeModule.get();
     }
     return nullptr;
 }
