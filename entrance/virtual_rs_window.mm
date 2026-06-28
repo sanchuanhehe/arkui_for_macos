@@ -862,7 +862,10 @@ WMError Window::ResizeWindowTo(int32_t width, int32_t height) {
         return WMError::WM_ERROR_INVALID_PARENT;
     }
     LOGI("Window: ResizeWindowTo %d %d", width, height);
-    if (isFullScreen_) {
+    // The isFullScreen_ guard is for the main window. A sub-window IS a full-screen
+    // transparent host that must be sized to the display, so don't let the guard
+    // reject it — otherwise rect_ stays 0 and the popup mis-positions.
+    if (isFullScreen_ && windowType_ != OHOS::Rosen::WindowType::WINDOW_TYPE_APP_SUB_WINDOW) {
         return WMError::WM_ERROR_INVALID_PARENT;
     }
     rect_.width_ = width;
