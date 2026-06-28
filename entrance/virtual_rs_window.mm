@@ -588,6 +588,36 @@ std::shared_ptr<Window> Window::GetTopWindow(const std::shared_ptr<OHOS::Ability
     return [windowView getWindow];
 }
 
+// Convert a sub-window's rect (ArkUI physical px, top-left, relative to the main
+// window content area) into the screen-space frame (points, bottom-left) that the
+// borderless NSPanel hosting it should occupy. This is what lets Menu/Popup/Dialog
+// extend past the main window's bounds.
+static NSRect ComputeSubPanelScreenFrame(NSWindow* mainNSWindow, const OHOS::Rosen::Rect& r)
+{
+    NSScreen* screen = mainNSWindow.screen ?: [NSScreen mainScreen];
+    // The engine models a sub-window as a full-screen transparent host (iOS sizes
+    // it to the display); the popup/menu/dialog is then positioned inside it. Until
+    // the engine has sized it (rect is still 0), cover the whole screen so the
+    // overlay can render and place its content anywhere — including past the main
+    // window's bounds, which is the whole point on desktop.
+    if (r.width_ <= 0 || r.height_ <= 0) {
+        return screen.frame;
+    }
+    CGFloat scale = mainNSWindow.backingScaleFactor > 0 ? mainNSWindow.backingScaleFactor : 2.0;
+    CGFloat wPt = r.width_ / scale;
+    CGFloat hPt = r.height_ / scale;
+    CGFloat xPt = r.posX_ / scale;
+    CGFloat yPt = r.posY_ / scale;
+    NSRect mainContentScreen = [mainNSWindow convertRectToScreen:[mainNSWindow.contentView frame]];
+    // A full-display-sized sub-window anchors to the screen origin (the engine
+    // positions the popup within it); a smaller one is offset inside the main
+    // window content area.
+    if (wPt >= NSWidth(screen.frame) - 1) {
+        return screen.frame;
+    }
+    return NSMakeRect(NSMinX(mainContentScreen) + xPt, NSMaxY(mainContentScreen) - yPt - hPt, wPt, hPt);
+}
+
 WMError Window::ShowWindow()
 {
     if (!windowView_) {
@@ -600,6 +630,37 @@ WMError Window::ShowWindow()
         return WMError::WM_ERROR_INVALID_PARENT;
     }
     NSView *mainWindowView = [controller getWindowView];
+
+    // Sub-windows (Dialog/Menu/Popup/dropdown) live in their own borderless NSPanel
+    // added as a child of the main NSWindow, so they track the main window but can
+    // draw outside its bounds — unlike the main window, which fills its host view.
+    if (windowType_ == OHOS::Rosen::WindowType::WINDOW_TYPE_APP_SUB_WINDOW) {
+        NSWindow* mainNSWindow = mainWindowView.window;
+        if (mainNSWindow == nil) {
+            return WMError::WM_ERROR_INVALID_PARENT;
+        }
+        NSRect panelFrame = ComputeSubPanelScreenFrame(mainNSWindow, rect_);
+        if (subPanel_ == nil) {
+            subPanel_ = [[NSPanel alloc] initWithContentRect:panelFrame
+                styleMask:(NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel)
+                backing:NSBackingStoreBuffered
+                defer:NO];
+            subPanel_.backgroundColor = [NSColor clearColor];
+            subPanel_.opaque = NO;
+            subPanel_.hasShadow = YES;
+            subPanel_.level = NSPopUpMenuWindowLevel;
+            subPanel_.releasedWhenClosed = NO;
+            subPanel_.contentView = windowView_;
+            [mainNSWindow addChildWindow:subPanel_ ordered:NSWindowAbove];
+        }
+        [subPanel_ setFrame:panelFrame display:YES];
+        [subPanel_ orderFront:nil];
+        DelayNotifyUIContentIfNeeded();
+        NotifyAfterForeground();
+        isWindowShow_ = true;
+        UpdateWindowStatus();
+        return WMError::WM_OK;
+    }
 
     if ([windowView_ showOnView:mainWindowView.superview]) {
         DelayNotifyUIContentIfNeeded();
@@ -616,6 +677,18 @@ WMError Window::Hide()
     if (!windowView_) {
         LOGE("Window: showWindow failed");
         return WMError::WM_ERROR_INVALID_PARENT;
+    }
+
+    // Sub-window: detach and hide its NSPanel.
+    if (subPanel_ != nil) {
+        if (subPanel_.parentWindow != nil) {
+            [subPanel_.parentWindow removeChildWindow:subPanel_];
+        }
+        [subPanel_ orderOut:nil];
+        isWindowShow_ = false;
+        NotifyAfterBackground();
+        UpdateWindowStatus();
+        return WMError::WM_OK;
     }
 
     if ([windowView_ hide]) {
@@ -644,6 +717,12 @@ WMError Window::MoveWindowTo(int32_t x, int32_t y)
     }
     rect_.posX_ = x;
     rect_.posY_ = y;
+    // Sub-window: reposition its NSPanel in screen space so it can move outside the
+    // main window (e.g. a menu opening near the bottom edge spilling below it).
+    if (subPanel_ != nil) {
+        [subPanel_ setFrame:ComputeSubPanelScreenFrame(subPanel_.parentWindow, rect_) display:YES];
+        return WMError::WM_OK;
+    }
     x = x < 0 ? 0 : x / scale;
     y = y < 0 ? 0 : y / scale;
     windowView_.frame = CGRectMake(x, y, windowView_.frame.size.width, windowView_.frame.size.height);
@@ -783,12 +862,17 @@ WMError Window::ResizeWindowTo(int32_t width, int32_t height) {
     if (isFullScreen_) {
         return WMError::WM_ERROR_INVALID_PARENT;
     }
+    rect_.width_ = width;
+    rect_.height_ = height;
+    // Sub-window: resize its NSPanel in screen space (anchored top-left so it grows
+    // downward like a real menu/popup), keeping it free of the main window bounds.
+    if (subPanel_ != nil) {
+        [subPanel_ setFrame:ComputeSubPanelScreenFrame(subPanel_.parentWindow, rect_) display:YES];
+        return WMError::WM_OK;
+    }
     NSScreen *screen = [NSScreen mainScreen];
     CGFloat scale = screen.backingScaleFactor;
     windowView_.frame = CGRectMake(windowView_.frame.origin.x, windowView_.frame.origin.y, width / scale, height / scale);
-
-    rect_.width_ = width;
-    rect_.height_ = height;
     return WMError::WM_OK;
 }
 

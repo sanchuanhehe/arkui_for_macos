@@ -36,9 +36,11 @@ typedef struct napi_value__* napi_value;
 #ifdef __OBJC__
 @class WindowView;
 @class NSViewController;
+@class NSWindow;
 #else
 typedef struct objc_object WindowView;
 typedef struct objc_object NSViewController;
+typedef struct objc_object NSWindow;
 #endif
 
 namespace OHOS {
@@ -489,6 +491,10 @@ private:
     std::shared_ptr<RSSurfaceNode> surfaceNode_;
     bool isWindowShow_ = false;
     WindowView* windowView_ = nullptr;
+    // macOS sub-windows (Dialog/Menu/Popup/dropdown) get their own borderless
+    // NSPanel so they can extend past the main window's bounds, instead of being
+    // clipped inside the main window's view hierarchy. nullptr for the main window.
+    NSWindow* subPanel_ = nullptr;
     std::shared_ptr<NSViewController> viewController_ = nullptr;
     std::shared_ptr<AbilityRuntime::Platform::Context> context_;
     std::unique_ptr<OHOS::Ace::Platform::UIContent> uiContent_;
