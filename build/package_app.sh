@@ -70,6 +70,19 @@ echo "=> vendored $(ls -1 "$FRAMEWORKS" 2>/dev/null | wc -l | tr -d ' ') dylib(s
 mkdir -p "$CONTENTS/Resources"
 cp -R "$RES_SRC" "$CONTENTS/Resources/arkui-x"
 
+# 3b) ICU data. The build links ICU's stubdata (empty), so i18n's InitIcuData
+#     points ICU at ./icu/ at runtime (cwd = resource root after the constructor
+#     chdir). Ship the real icudt<ver>l.dat there so @ohos.intl DateTimeFormat/
+#     NumberFormat have locale data; without it every .format() returns empty.
+ICU_DAT="$(find "$OUT_DIR" -name 'icudt*l.dat' -type f 2>/dev/null | head -1)"
+if [ -n "$ICU_DAT" ]; then
+  mkdir -p "$CONTENTS/Resources/icu"
+  cp "$ICU_DAT" "$CONTENTS/Resources/icu/"
+  echo "=> bundled ICU data: $(basename "$ICU_DAT")"
+else
+  echo "  ⚠ ICU data (icudt*l.dat) not found under $OUT_DIR — intl formatting will be empty"
+fi
+
 # 4) Info.plist
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
