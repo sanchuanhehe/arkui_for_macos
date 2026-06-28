@@ -99,6 +99,19 @@ cat > "$CONTENTS/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <!-- M8 security/privacy compliance: macOS TERMINATES an app that touches these
+       protected resources without a usage-description string. ArkUI capabilities
+       (camera/microphone XComponent, image picker, downloads, geolocation) map to
+       these TCC services; declaring them up front keeps a built .app from crashing
+       the moment a page exercises one, and is required for notarized distribution. -->
+  <key>NSCameraUsageDescription</key><string>This app uses the camera for media components.</string>
+  <key>NSMicrophoneUsageDescription</key><string>This app uses the microphone for audio capture.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>This app accesses photos for the image picker.</string>
+  <key>NSPhotoLibraryAddUsageDescription</key><string>This app saves images to your photo library.</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>This app reads and writes documents you choose.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>This app saves downloaded files.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>This app uses your location for location-aware features.</string>
+  <key>NSAppleEventsUsageDescription</key><string>This app sends Apple events for automation.</string>
 </dict>
 </plist>
 PLIST
