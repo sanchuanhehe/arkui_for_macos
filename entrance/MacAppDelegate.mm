@@ -68,7 +68,12 @@
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
 {
-    return YES;
+    // NO: a sub-window (Dialog/Menu/Popup) lives in a child NSPanel that covers the
+    // main window; as it is shown/hidden AppKit's "last window closed" accounting
+    // can momentarily see no eligible window and would terminate the whole app.
+    // Standard macOS desktop behaviour anyway — the app stays alive in the Dock when
+    // its window is closed; Cmd-Q (applicationShouldTerminate) still quits.
+    return NO;
 }
 
 @end
