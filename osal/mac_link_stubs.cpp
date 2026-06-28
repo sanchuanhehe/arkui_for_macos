@@ -138,6 +138,11 @@ namespace OHOS::Ace::NG {
 void VibratorUtils::StartVibraFeedback(const std::string& /*vibratorType*/)
 {
 }
+// No-arg overload referenced by indexer_pattern.cpp (haptic feedback on item select).
+// mac has no haptic engine — stub to satisfy the static link.
+void VibratorUtils::StartVibraFeedback()
+{
+}
 void VibratorUtils::StartViratorDirectly(const std::string& /*vibratorType*/)
 {
 }

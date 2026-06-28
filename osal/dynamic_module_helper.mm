@@ -44,6 +44,11 @@ extern "C" void* OHOS_ACE_DynamicModule_Create_Gauge();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Counter();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Stepper();
 extern "C" void* OHOS_ACE_DynamicModule_Create_StepperItem();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Hyperlink();
+extern "C" void* OHOS_ACE_DynamicModule_Create_PatternLock();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Indexer();
+extern "C" void* OHOS_ACE_DynamicModule_Create_DataPanel();
+extern "C" void* OHOS_ACE_DynamicModule_Create_DynamicLayout();
 
 namespace OHOS::Ace {
 namespace {
@@ -63,6 +68,11 @@ static std::unique_ptr<DynamicModule> g_gaugeModule = nullptr;
 static std::unique_ptr<DynamicModule> g_counterModule = nullptr;
 static std::unique_ptr<DynamicModule> g_stepperModule = nullptr;
 static std::unique_ptr<DynamicModule> g_stepperItemModule = nullptr;
+static std::unique_ptr<DynamicModule> g_hyperlinkModule = nullptr;
+static std::unique_ptr<DynamicModule> g_patternlockModule = nullptr;
+static std::unique_ptr<DynamicModule> g_indexerModule = nullptr;
+static std::unique_ptr<DynamicModule> g_dataPanelModule = nullptr;
+static std::unique_ptr<DynamicModule> g_dynamicLayoutModule = nullptr;
 
 // Initialize static modules
 void InitializeStaticModules()
@@ -80,6 +90,11 @@ void InitializeStaticModules()
         g_counterModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Counter()));
         g_stepperModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Stepper()));
         g_stepperItemModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_StepperItem()));
+        g_hyperlinkModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Hyperlink()));
+        g_patternlockModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_PatternLock()));
+        g_indexerModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Indexer()));
+        g_dataPanelModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_DataPanel()));
+        g_dynamicLayoutModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_DynamicLayout()));
         LOGI("InitializeStaticModules finished");
     });
 }
@@ -164,6 +179,21 @@ DynamicModule* GetStaticModule(const std::string& name)
     }
     if (name == "StepperItem") {
         return g_stepperItemModule.get();
+    }
+    if (name == "Hyperlink") {
+        return g_hyperlinkModule.get();
+    }
+    if (name == "PatternLock") {
+        return g_patternlockModule.get();
+    }
+    if (name == "Indexer") {
+        return g_indexerModule.get();
+    }
+    if (name == "DataPanel") {
+        return g_dataPanelModule.get();
+    }
+    if (name == "DynamicLayout") {
+        return g_dynamicLayoutModule.get();
     }
     return nullptr;
 }
