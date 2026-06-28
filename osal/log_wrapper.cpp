@@ -17,6 +17,8 @@
 
 #ifdef _GNU_SOURCE
 #include <dlfcn.h>
+#include <cstdio>
+#include <cstdlib>
 #endif
 #include <mutex>
 
@@ -238,6 +240,15 @@ void LogWrapper::PrintLog(LogDomain domain, LogLevel level, AceLogTag tag, const
     os_log_type_t logType = LOG_TYPE[static_cast<int>(level)];
     os_log_t log = os_log_create(LOG_TAGS[static_cast<uint32_t>(domain)], GetNameForLogLevel(level));
     os_log(log, "[%{public}s] %{public}s", GetNameForLogLevel(level), buffer);
+
+    // Optional plain-text mirror to stderr. os_log redacts dynamic strings as <private>
+    // and is awkward to tail; set ACE_LOG_STDERR=1 to also stream the fully-rendered
+    // line to stderr (Console-free, greppable, no redaction) for development/debugging.
+    static const bool kLogToStderr = (::getenv("ACE_LOG_STDERR") != nullptr);
+    if (kLogToStderr) {
+        fprintf(stderr, "[%s][%s] %s\n", LOG_TAGS[static_cast<uint32_t>(domain)],
+            GetNameForLogLevel(level), buffer);
+    }
 }
 
 #ifdef ACE_INSTANCE_LOG

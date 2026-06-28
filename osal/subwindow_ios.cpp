@@ -134,6 +134,11 @@ void SubwindowIos::InitSubwindow(const RefPtr<Platform::AceContainerSG>& parentC
     window_ = Rosen::Window::CreateSubWindow(parentWindow->GetContext(), windowOption);
     if (!window_) {
         TAG_LOGE(AceLogTag::ACE_SUB_WINDOW, "Window create failed.");
+    } else {
+        // Engine popup/menu/dialog: NOT a user-movable window. Keep the full-screen
+        // transparent host + dispatch drags to ArkUI + dismiss on outside click.
+        // (CreateSubWindow defaults movable=true for app-created @ohos.window ones.)
+        window_->SetMovableSubWindow(false);
     }
 }
 

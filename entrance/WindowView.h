@@ -53,6 +53,10 @@ class Window;
 // backing layer clears to alpha 0 and only the popup content is visible.
 - (void)markAsTransparentSubWindow;
 
+// YES for an app-created (@ohos.window) sub-window the user can drag to move;
+// NO for engine popups (which dispatch drags to ArkUI and dismiss on outside click).
+- (void)setMovableSubWindow:(BOOL)movable;
+
 - (void)setWindowDelegate:(std::shared_ptr<OHOS::Rosen::Window>)window;
 - (void)createSurfaceNode;
 - (BOOL)requestFocus;

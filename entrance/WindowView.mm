@@ -317,6 +317,11 @@ std::u16string NSStringToU16(NSString* s)
     // Set for sub-window views (Dialog/Menu/Popup) so their backing WindowGLLayer
     // clears to transparent instead of opaque white — only the popup content shows.
     BOOL _transparentSubWindow;
+
+    // Set for an app-created (@ohos.window) sub-window that the user can drag to
+    // move. Popup/Menu/Dialog sub-windows leave this NO so their drags still reach
+    // the engine (and they dismiss on outside click instead of moving).
+    BOOL _movableSubWindow;
 }
 
 #pragma mark - Backing layer (replaces +layerClass / CAEAGLLayer)
@@ -350,6 +355,11 @@ std::u16string NSStringToU16(NSString* s)
     if ([self.layer isKindOfClass:[WindowGLLayer class]]) {
         ((WindowGLLayer*)self.layer).transparentBackground = YES;
     }
+}
+
+- (void)setMovableSubWindow:(BOOL)movable
+{
+    _movableSubWindow = movable;
 }
 
 // ArkUI expects a top-left origin coordinate system; AppKit defaults to
@@ -772,6 +782,14 @@ std::u16string NSStringToU16(NSString* s)
 
 - (void)mouseDown:(NSEvent*)event
 {
+    // Movable sub-window (app-created via @ohos.window): let AppKit drag the whole
+    // window instead of dispatching a touch into ArkUI. performWindowDragWithEvent:
+    // handles the move, screen-edge clamping and mouse-up for us. Popups (flag NO)
+    // fall through to the normal engine touch path.
+    if (_movableSubWindow && self.window != nil) {
+        [self.window performWindowDragWithEvent:event];
+        return;
+    }
     [self dispatchMouseEvent:event action:OHOS::Ace::Platform::AcePointerData::PointerAction::kDowned];
 }
 

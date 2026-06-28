@@ -273,6 +273,16 @@ public:
         return windowType_;
     }
 
+    // macOS: distinguish an app-created movable @ohos.window sub-window (default)
+    // from an engine popup (SubwindowIos sets this false). Drives draggability and
+    // content-sized vs full-screen-transparent NSPanel. Implemented in the .mm so it
+    // can also propagate the flag to the WindowView (ObjC).
+    void SetMovableSubWindow(bool movable);
+    bool IsMovableSubWindow() const
+    {
+        return isMovableSubWindow_;
+    }
+
     WindowMode GetMode()
     {
         return windowMode_;
@@ -495,6 +505,10 @@ private:
     // NSPanel so they can extend past the main window's bounds, instead of being
     // clipped inside the main window's view hierarchy. nullptr for the main window.
     NSWindow* subPanel_ = nullptr;
+    // YES for an app-created (@ohos.window) sub-window: user-draggable, content-sized
+    // and positioned by the app (moveWindowTo). NO for engine popups, which stay the
+    // full-screen transparent host. Set false by SubwindowIos for popups.
+    bool isMovableSubWindow_ = true;
     std::shared_ptr<NSViewController> viewController_ = nullptr;
     std::shared_ptr<AbilityRuntime::Platform::Context> context_;
     std::unique_ptr<OHOS::Ace::Platform::UIContent> uiContent_;
