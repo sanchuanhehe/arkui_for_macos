@@ -32,6 +32,9 @@ template("ace_macos_source_set") {
       "$ace_root/adapter/macos/entrance",
       "$ace_root/adapter/macos/entrance/resource",
       "$ace_root/adapter/macos/capability/web",
+      "$ace_root/adapter/macos/capability/surface",
+      "$ace_root/adapter/macos/capability/video",
+      "$ace_root/adapter/macos/capability/texture",
       "$ace_root/adapter/macos/stage/ability",
       "//foundation/appframework/window_manager/interfaces/innerkits/wm",
       "//foundation/appframework/window_manager/interfaces/innerkits/dm",
@@ -115,6 +118,9 @@ template("ace_macos_source_set") {
       "ace_bridge.mm",
       "ace_resource_register.cpp",
       "AceSurfaceHolder.mm",
+      # M5 Video carrier (texture path): id-keyed registry of AceTexture objects, looked up
+      # by AceVideo when attaching the AVPlayerItemVideoOutput.
+      "AceTextureHolder.mm",
       "AcePlatformPluginMac.mm",
       "resource/AceResourcePlugin.m",
       "resource/AceResourceRegisterOC.mm",
@@ -153,6 +159,9 @@ template("ace_macos_source_set") {
       "OpenGL.framework",
       "QuartzCore.framework",
       "CoreVideo.framework",
+      # AcePlatformPluginMac imports the texture plugin headers (AceTexture.h pulls AVFoundation).
+      "AVFoundation.framework",
+      "CoreMedia.framework",
     ]
 
     subsystem_name = "arkui"

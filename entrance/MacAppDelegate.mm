@@ -32,6 +32,22 @@
 
 @implementation MacAppDelegate
 
+- (void)applicationWillFinishLaunching:(NSNotification*)notification
+{
+    // Suppress AppKit's launch-time document autoreopen / window state restoration. lldb showed
+    // -[NSDocumentController _autoreopenDocumentsIgnoringExpendable:] -> _autosaveDirectoryURL...
+    // -> URLForDirectory:NSDocumentDirectory at startup, which touches ~/Documents and pops a
+    // "allow access to your Documents folder" TCC prompt. This ArkUI app is not document-based,
+    // so the autoreopen is spurious; ignoring persisted state skips it. Must run BEFORE
+    // didFinishLaunching (when AppKit performs the autoreopen).
+    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ @"ApplePersistenceIgnoreState" : @YES }];
+}
+
+- (BOOL)applicationShouldOpenUntitledFile:(NSApplication*)sender
+{
+    return NO;
+}
+
 - (void)applicationDidFinishLaunching:(NSNotification*)notification
 {
     // cwd is pinned to the bundle resources by a constructor(101) in main.mm (runs

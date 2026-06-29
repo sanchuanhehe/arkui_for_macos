@@ -3382,8 +3382,10 @@ std::vector<std::string> convertCertificateChainToDer(NSArray *certificateChain)
     didFinishDownloadingToURL:(NSURL *)location {
     NSString* guid = [NSString stringWithFormat:@"%lld_%lu", self.incId, downloadTask.taskIdentifier];
     NSString* suggestedFilename = downloadTask.response.suggestedFilename;
+    // macOS: save web downloads under Application Support, not ~/Documents — the latter is a
+    // TCC-protected directory whose first access pops a "allow access to Documents" prompt.
     NSString* documentsPath = [NSSearchPathForDirectoriesInDomains(
-        NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+        NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
     NSString* path = documentsPath;
     DownloadTaskInfo* downloadTaskInfo = [self.downloadTasksDic objectForKey:guid];
     if (downloadTaskInfo) {

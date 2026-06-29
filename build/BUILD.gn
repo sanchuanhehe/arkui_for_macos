@@ -154,6 +154,18 @@ ohos_executable("ace_macos") {
   # Web component; without it `new webview.WebviewController()` throws and the page won't render.
   deps += [ "//plugins/web/webview:web_webview_static_mac" ]
 
+  # M5 Video + surface carriers: AVPlayer-backed Video on the AceSurfaceView CALayer. The video
+  # pattern itself is already compiled into libace (ace_core_ng_mac); these are the native glue.
+  deps += [
+    "//foundation/arkui/ace_engine/adapter/macos/capability/surface:ace_surface_macos",
+    "//foundation/arkui/ace_engine/adapter/macos/capability/video:ace_video_macos",
+
+    # M5 Video carrier (texture path): AceTexture / AceTextureResourcePlugin. Lets AVPlayer frames
+    # composite as a GL texture in the Rosen render tree (Video controls draw on top) instead of a
+    # native AVPlayerLayer overlay.
+    "//foundation/arkui/ace_engine/adapter/macos/capability/texture:ace_texture_macos",
+  ]
+
   frameworks = [
     "AppKit.framework",
     "QuartzCore.framework",
