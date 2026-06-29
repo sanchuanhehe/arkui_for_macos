@@ -136,6 +136,11 @@ ohos_executable("ace_macos") {
     "//plugins/intl:intl_static_mac",
   ]
 
+  # M4 file picker: @ohos.file.picker (DocumentViewPicker) → NSOpenPanel/NSSavePanel.
+  # Same __attribute__((constructor)) self-registration as the napi kits above; the
+  # macos/ branch in plugins/file/picker/filepicker/BUILD.gn pulls the AppKit impl.
+  deps += [ "//plugins/file/picker/filepicker:file_picker_static" ]
+
   frameworks = [
     "AppKit.framework",
     "QuartzCore.framework",
