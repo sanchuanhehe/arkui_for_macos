@@ -68,15 +68,18 @@ static NSMutableDictionary<NSString*, AceWeb*> *objectMap;
     } else {
       aceWeb = [[AceWeb alloc] init:incId target:(NSViewController*)self.target onEvent:callback abilityInstanceId:self.instanceId];
     }
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_4
-    if([[[NSProcessInfo_compat currentDevice] systemVersion] floatValue] >= 16.4){
+    if (@available(macOS 13.3, *)) {
         [aceWeb getWeb].inspectable = [AceWeb getWebDebuggingAccess];
     }
-#endif
     [aceWeb loadUrl:[param valueForKey:URL_SRC] header:[NSMutableDictionary dictionary]];
     StageViewController* controller = (StageViewController*)self.target;
     NSView *windowView = [controller getWindowView];
-    [windowView.superview insertSubview:aceWeb.getWeb belowSubview:windowView];
+    // macOS: the GL WindowView is opaque, so the WKWebView must overlay ABOVE it (iOS inserts
+    // below a transparent UIView). NSView uses addSubview:positioned:relativeTo: (no
+    // insertSubview:belowSubview:). The web component's rect is applied via updateWebLayout.
+    WKWebView* web = aceWeb.getWeb;
+    web.translatesAutoresizingMaskIntoConstraints = YES;
+    [windowView.superview addSubview:web positioned:NSWindowAbove relativeTo:windowView];
     [self addResource:incId web:aceWeb];
     return incId;
 }

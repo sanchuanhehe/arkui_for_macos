@@ -31,6 +31,7 @@ template("ace_macos_source_set") {
       "$ace_root",
       "$ace_root/adapter/macos/entrance",
       "$ace_root/adapter/macos/entrance/resource",
+      "$ace_root/adapter/macos/capability/web",
       "$ace_root/adapter/macos/stage/ability",
       "//foundation/appframework/window_manager/interfaces/innerkits/wm",
       "//foundation/appframework/window_manager/interfaces/innerkits/dm",
@@ -114,6 +115,7 @@ template("ace_macos_source_set") {
       "ace_bridge.mm",
       "ace_resource_register.cpp",
       "AceSurfaceHolder.mm",
+      "AcePlatformPluginMac.mm",
       "resource/AceResourcePlugin.m",
       "resource/AceResourceRegisterOC.mm",
     ]

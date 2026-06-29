@@ -18,13 +18,52 @@
 
 @property (nonatomic, copy, nullable) AceWebDarkModeObserver darkModeObserver;
 
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 170000
+#if !defined(MAC_PLATFORM) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 170000
 @property (nonatomic, strong, nullable) id<UITraitChangeRegistration> darkModeRegistration;
 #endif
 
 @end
 
 @implementation AceWebView
+
+#ifdef MAC_PLATFORM
+
+// macOS dark mode: NSView reports appearance changes via -viewDidChangeEffectiveAppearance,
+// and the effective light/dark state is read from effectiveAppearance (vs iOS's
+// UITraitCollection.userInterfaceStyle / registerForTraitChanges).
+- (void)observeSystemDarkModeWithBlock:(AceWebDarkModeObserver)observer
+{
+    self.darkModeObserver = observer;
+    [self notifyDarkMode];
+}
+
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
+    [self notifyDarkMode];
+}
+
+- (BOOL)currentDarkModeEnabled
+{
+    NSAppearanceName name = [self.effectiveAppearance
+        bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    return [name isEqualToString:NSAppearanceNameDarkAqua];
+}
+
+- (void)notifyDarkMode
+{
+    BOOL isDarkModeEnabled = [self currentDarkModeEnabled];
+    if (self.darkModeObserver != nil) {
+        self.darkModeObserver(isDarkModeEnabled);
+    }
+}
+
+- (void)releaseDarkModeObserver
+{
+    self.darkModeObserver = nil;
+}
+
+#else  // iOS
 
 - (void)observeSystemDarkModeWithBlock:(AceWebDarkModeObserver)observer
 {
@@ -54,7 +93,7 @@
 - (BOOL)currentDarkModeEnabled
 {
     if (@available(iOS 13.0, *)) {
-        return self.traitCollection.userInterfaceStyle == NSAppearanceDark;
+        return self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     }
     return NO;
 }
@@ -84,5 +123,7 @@
     }
 #endif
 }
+
+#endif  // MAC_PLATFORM
 
 @end

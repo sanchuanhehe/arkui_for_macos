@@ -222,7 +222,7 @@ typedef id (^onJavaScriptFunction)(NSString* objName, NSString* methodName, NSAr
 @property (nonatomic, strong) NestedScrollOptionsExt *nestedOpt;
 @property (nonatomic, assign) CGPoint dragStartPoint;
 @property (nonatomic, assign) BOOL hasCalledOnScrollStart;
-@property (nonatomic, strong) NSHashTable<UIGestureRecognizer*> *selectionGestureRecognizers;
+@property (nonatomic, strong) NSHashTable<NSGestureRecognizer*> *selectionGestureRecognizers;
 @property (nonatomic, assign) BOOL isSelectionDragArmed;
 @property (nonatomic, assign) BOOL hasTriggeredDragHaptic;
 @property (nonatomic, assign) BOOL isSelectionLongPressActive;
@@ -378,7 +378,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
     config.preferences = preference;
     config.userContentController = userContentController;
+#ifndef MAC_PLATFORM
+    // allowsInlineMediaPlayback is an iOS-only WKWebViewConfiguration property (macOS always
+    // plays inline). mediaTypesRequiringUserActionForPlayback exists on both.
     config.allowsInlineMediaPlayback = YES;
+#endif
     config.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
     [config setURLSchemeHandler:self forURLScheme:CUSTOM_SCHEME];
     [config setURLSchemeHandler:self forURLScheme:CUSTOM_SCHEME_HANDLER];
@@ -386,16 +390,22 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     self.webView = [[AceWebView alloc] initWithFrame:CGRectZero configuration:config];
     self.webView.UIDelegate = self;
     self.webView.navigationDelegate = self;
+#ifndef MAC_PLATFORM
+    // macOS WKWebView exposes no UIScrollView — scroll delegate / content-inset / content-size
+    // KVO are iOS-only. Scroll position changes are observed via JS on macOS where needed.
     self.webView.scrollView.delegate = self;
     if (@available(iOS 11.0, *)) {
         self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     }
+#endif
     [self.webView addObserver:self forKeyPath:ESTIMATEDPROGRESS options:NSKeyValueObservingOptionNew context:nil];
     [self.webView addObserver:self forKeyPath:TITLE options:NSKeyValueObservingOptionNew context:nil];
+#ifndef MAC_PLATFORM
     [self.webView.scrollView addObserver:self
                               forKeyPath:CONTENT_SIZE
                                  options:NSKeyValueObservingOptionNew
                                  context:nil];
+#endif
     self.hasCalledOnScrollStart = YES;
     self.selectionGestureRecognizers = [NSHashTable weakObjectsHashTable];
     self.isSelectionDragArmed = NO;
@@ -627,7 +637,14 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (CGFloat)getPageHeight
 {
+#ifdef MAC_PLATFORM
+    // macOS WKWebView has no UIScrollView.contentSize; the rendered document height equals the
+    // web view's own frame height (WebKit lays content into the NSView). For exact body height,
+    // callers use JS (document.body.scrollHeight) asynchronously.
+    return self.webView.frame.size.height;
+#else
     return self.webView.scrollView.contentSize.height;
+#endif
 }
 
 - (void)createWebMessagePorts:(NSArray*)portsName
@@ -764,6 +781,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         y = 0.f;
     }
 
+#ifdef MAC_PLATFORM
+    // macOS: no UIScrollView; absolute scroll via JS window.scrollTo.
+    NSString* js = [NSString stringWithFormat:@"window.scrollTo(%f, %f);", x < 0 ? 0 : x, y < 0 ? 0 : y];
+    [self.webView evaluateJavaScript:js completionHandler:nil];
+#else
     CGFloat offsetX = 0.f;
     CGFloat offsetY = 0.f;
     if (self.webView.scrollView.contentSize.width > self.webView.frame.size.width) {
@@ -773,16 +795,21 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         offsetY = y < 0 ? 0 : y;
     }
     [self.webView.scrollView setContentOffset:CGPointMake(offsetX, offsetY) animated:YES];
+#endif
 }
 
 - (void)scrollBy:(CGFloat)deltaX deltaY:(CGFloat)deltaY
 {
-    if ([[NSString stringWithFormat:@"%f", deltaX] isEqualToString:@"nan"] || 
+    if ([[NSString stringWithFormat:@"%f", deltaX] isEqualToString:@"nan"] ||
         [[NSString stringWithFormat:@"%f", deltaY] isEqualToString:@"nan"]){
         deltaX = 0.f;
         deltaY = 0.f;
     }
-
+#ifdef MAC_PLATFORM
+    // macOS: no UIScrollView; relative scroll via JS window.scrollBy.
+    NSString* js = [NSString stringWithFormat:@"window.scrollBy(%f, %f);", deltaX, deltaY];
+    [self.webView evaluateJavaScript:js completionHandler:nil];
+#else
     CGFloat offsetX = 0.f;
     CGFloat offsetY = 0.f;
     if (self.webView.scrollView.contentSize.width > self.webView.frame.size.width) {
@@ -793,25 +820,45 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     }
     [self.webView.scrollView setContentOffset:CGPointMake(offsetX < 0 ? 0 : offsetX, offsetY < 0 ? 0 : offsetY)
                                      animated:YES];
+#endif
 }
 
 - (void)zoom:(CGFloat)factor
 {
     if(factor > 0 && factor <= 100) {
+#ifdef MAC_PLATFORM
+        // macOS WKWebView has no UIScrollView; use the pageZoom property (macOS 11+).
+        if (@available(macOS 11.0, *)) {
+            self.webView.pageZoom = self.webView.pageZoom * factor;
+        }
+#else
         [self.webView.scrollView setZoomScale:self.webView.scrollView.zoomScale * factor];
+#endif
     }
 }
 
 - (void)zoomIn {
+#ifdef MAC_PLATFORM
+    if (@available(macOS 11.0, *)) {
+        self.webView.pageZoom = self.webView.pageZoom * ZOOMIN_SCALE_VALUE;
+    }
+#else
     UIScrollView *scrollView = self.webView.scrollView;
     CGFloat zoomInValue = scrollView.zoomScale * ZOOMIN_SCALE_VALUE;
     [scrollView setZoomScale:zoomInValue];
+#endif
 }
 
 - (void)zoomOut {
+#ifdef MAC_PLATFORM
+    if (@available(macOS 11.0, *)) {
+        self.webView.pageZoom = self.webView.pageZoom * ZOOMOUT_SCALE_VALUE;
+    }
+#else
     UIScrollView *scrollView = self.webView.scrollView;
     CGFloat zoomOutValue = scrollView.zoomScale * ZOOMOUT_SCALE_VALUE;
     [scrollView setZoomScale:zoomOutValue];
+#endif
 }
 
 + (BOOL)getWebDebuggingAccess {
@@ -825,6 +872,12 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (void)pageDown:(bool)value
 {
+#ifdef MAC_PLATFORM
+    // macOS: no UIScrollView; scroll via JS. bottom -> scrollTo(max), else half-viewport down.
+    NSString* js = value ? @"window.scrollTo(0, document.body.scrollHeight);"
+                         : @"window.scrollBy(0, window.innerHeight/2);";
+    [self.webView evaluateJavaScript:js completionHandler:nil];
+#else
     UIScrollView *scrollView = self.webView.scrollView;
     CGFloat screenHeight = scrollView.bounds.size.height;
     CGFloat contentHeight = scrollView.contentSize.height - screenHeight;
@@ -837,6 +890,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         newOffset = CGPointMake(currentOffset.x, MIN(contentHeight, currentOffset.y + halfScreenHeight));
     }
     [scrollView setContentOffset:newOffset animated:YES];
+#endif
 }
 
 - (void)postUrl:(NSString*)url postData:(NSData *)postData {
@@ -883,6 +937,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (void)pageUp:(bool)value
 {
+#ifdef MAC_PLATFORM
+    NSString* js = value ? @"window.scrollTo(0, 0);"
+                         : @"window.scrollBy(0, -window.innerHeight/2);";
+    [self.webView evaluateJavaScript:js completionHandler:nil];
+#else
     UIScrollView* scrollView = self.webView.scrollView;
     CGFloat contentHeight = scrollView.contentOffset.y;
     CGFloat viewHeight = scrollView.bounds.size.height / WEBVIEW_PAGE_HALF;
@@ -893,6 +952,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         offset = CGPointMake(0, MAX(0, contentHeight - viewHeight));
     }
     [scrollView setContentOffset:offset animated:YES];
+#endif
 }
 
 - (void)setCustomUserAgent:(NSString*)userAgent
@@ -910,7 +970,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     self.callSyncMethodMap = [[NSMutableDictionary alloc] init];
     self.downloadTasksDic = [[NSMutableDictionary alloc] init];
     self.schemeHandlerMap = [[NSMutableDictionary alloc] init];
+#ifdef MAC_PLATFORM
+    self.screenScale = [NSScreen mainScreen].backingScaleFactor;  // iOS: UIScreen.scale
+#else
     self.screenScale = [NSScreen mainScreen].scale;
+#endif
     InjectAceWebResourceObject();
 }
 
@@ -1197,8 +1261,13 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (void)enterFullScreenOrExitFullScreenNotifi
 {
+#ifndef MAC_PLATFORM
+    // iOS observes UIWindow show/hide to detect WKWebView's fullscreen video transition view.
+    // macOS WKWebView handles HTML5 video fullscreen natively (its own NSWindow), so no manual
+    // transition-view ergodic is needed.
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(beginFullScreen:) name:UIWindowDidBecomeVisibleNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(endFullScreen:) name:UIWindowDidBecomeHiddenNotification object:nil];
+#endif
 }
 
 - (void)beginFullScreen:(NSNotification *)notify
@@ -1211,6 +1280,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (void)ergodicKeyWindow
 {
+#ifndef MAC_PLATFORM
     NSArray *arr = [[[NSApplication sharedApplication] connectedScenes] allObjects];
     UIWindowScene *windowScene = (UIWindowScene *)arr[0];
     UIWindow *keyWindow = windowScene.keyWindow;
@@ -1219,6 +1289,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
             [self findFullScreen:transitionView];
         }
     }
+#endif
 }
 
 - (void)setVideoSize
@@ -1448,7 +1519,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
                     enableBounce = NO;
                     break;
             }
+#ifndef MAC_PLATFORM
             strongSelf.webView.scrollView.bounces = enableBounce;
+#else
+            (void)enableBounce;  // macOS WKWebView manages elastic scroll itself.
+#endif
             return SUCCESS;
         }
         return FAIL;
@@ -1543,11 +1618,15 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         bool isHorizontalScrollBarEnable = [[param objectForKey:NTC_HORIZONTALSCROLLBAR_ACCESS] boolValue];
         __strong __typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) {
+#ifndef MAC_PLATFORM
             if (!isHorizontalScrollBarEnable) {
                 self.webView.scrollView.showsHorizontalScrollIndicator = NO;
             } else {
                 self.webView.scrollView.showsHorizontalScrollIndicator = YES;
             }
+#else
+            (void)isHorizontalScrollBarEnable;  // macOS WKWebView owns its scrollers.
+#endif
             return SUCCESS;
         } else {
             LOGE("AceWeb: horizontalScrollBar fail");
@@ -1567,11 +1646,15 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         bool isVerticalScrollBarEnable = [[param objectForKey:NTC_VERTICALSCROLLBAR_ACCESS] boolValue];
         __strong __typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) {
+#ifndef MAC_PLATFORM
             if (!isVerticalScrollBarEnable) {
                 self.webView.scrollView.showsVerticalScrollIndicator = NO;
             } else {
                 self.webView.scrollView.showsVerticalScrollIndicator = YES;
             }
+#else
+            (void)isVerticalScrollBarEnable;  // macOS WKWebView owns its scrollers.
+#endif
             return SUCCESS;
         } else {
             LOGE("AceWeb: horizontalScrollBar fail");
@@ -1599,6 +1682,15 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         int backgroundColor = [[param objectForKey:NTC_BACKGROUNDCOLOR] intValue];
         __strong __typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) {
+#ifdef MAC_PLATFORM
+            // macOS: WKWebView has underPageBackgroundColor (12+); NSView has no backgroundColor
+            // property — set it via the backing layer instead, and there is no UIScrollView.
+            if (@available(macOS 12.0, *)) {
+                self.webView.underPageBackgroundColor = [self hexToColor:backgroundColor];
+            }
+            self.webView.wantsLayer = YES;
+            self.webView.layer.backgroundColor = [self hexToColor:backgroundColor].CGColor;
+#else
             if (@available(iOS 15.0, *)) {
                 self.webView.underPageBackgroundColor = [self hexToColor:backgroundColor];
             } else {
@@ -1606,6 +1698,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
             }
             [self.webView setOpaque:NO];
             self.webView.scrollView.backgroundColor = [self hexToColor:backgroundColor];
+#endif
             return SUCCESS;
         } else {
             LOGE("AceWeb: backgroundColor fail");
@@ -1872,11 +1965,30 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         return;
     }
     self.webScrollEnabled = !isFitContentMode;
+#ifndef MAC_PLATFORM
     self.webView.scrollView.bounces = !isFitContentMode;
+#endif
 }
 
 - (void)setDarkMode:(NSInteger)darkModeValue
 {
+#ifdef MAC_PLATFORM
+    // macOS: drive WKWebView appearance via NSAppearance (iOS uses overrideUserInterfaceStyle).
+    NSAppearance* appearance = nil;
+    switch (darkModeValue) {
+        case DARK_MODE_LIGHT:
+            appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+            break;
+        case DARK_MODE_DARK:
+            appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+            break;
+        case DARK_MODE_SYSTEM:
+        default:
+            appearance = nil;  // nil => follow system
+            break;
+    }
+    self.webView.appearance = appearance;
+#else
     if (@available(iOS 13.0, *)) {
         UIUserInterfaceStyle interfaceStyle = UIUserInterfaceStyleUnspecified;
         switch (darkModeValue) {
@@ -1896,6 +2008,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     } else {
         LOGW("AceWeb: Dark mode not supported on iOS versions below 13.0");
     }
+#endif
 }
 
 - (void)setForceDark:(BOOL)enable
@@ -2057,11 +2170,13 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     LOGI("AceWeb releaseObject");
     [self.webView removeObserver:self forKeyPath:ESTIMATEDPROGRESS];
     [self.webView removeObserver:self forKeyPath:TITLE];
+#ifndef MAC_PLATFORM
     [self.webView.scrollView removeObserver:self forKeyPath:CONTENT_SIZE];
-    for (UIGestureRecognizer *gestureRecognizer in self.selectionGestureRecognizers) {
+    for (NSGestureRecognizer *gestureRecognizer in self.selectionGestureRecognizers) {
         [gestureRecognizer removeTarget:self action:@selector(onSelectionLongPress:)];
     }
     [self.selectionGestureRecognizers removeAllObjects];
+#endif
     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:CONSOLELOG];
     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:CONSOLEINFO];
     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:CONSOLEERROR];
@@ -2125,9 +2240,11 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         return;
     }
     for (NSView *subview in view.subviews) {
+#ifndef MAC_PLATFORM
         if ([subview isKindOfClass:[UIScrollView class]]) {
             ((UIScrollView *)subview).bounces = NO;
         }
+#endif
         [self closeBounceForSubScrollViews:subview];
     }
 }
@@ -2511,12 +2628,21 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     } else if ([keyPath isEqualToString:TITLE] && object == _webView) {
         _webView.title == nil ? [self fireCallback:NTC_ONRECEIVEDTITLE params:@""]
                               : [self fireCallback:NTC_ONRECEIVEDTITLE params:_webView.title];
+#ifndef MAC_PLATFORM
     } else if ([keyPath isEqualToString:CONTENT_SIZE] &&
                object == self.webView.scrollView) {
         [self debounceUpdateWebViewHeight];
+#endif
     }
 }
 
+#ifdef MAC_PLATFORM
+// macOS WKWebView has no UIScrollView and uses NSGestureRecognizer; the iOS scroll-event
+// forwarding + long-press-selection-haptic block below is gated out. Selection / scroll
+// events on macOS flow through WebKit's own handling. Provide a no-op so the init path's
+// [self registerSelectionGestures] call still links.
+- (void)registerSelectionGestures {}
+#else
 #pragma mark - UIScrollViewDelegate
 - (void)registerSelectionGestures
 {
@@ -2673,6 +2799,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         }
     }
 }
+#endif // MAC_PLATFORM (iOS scroll/gesture block)
 
 - (NSString*)generateJavaScriptForResult:(id)result className:(NSString*)className methodName:(NSString*)methodName
 {
@@ -2976,9 +3103,16 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
 
 - (void)handleAuthenticationMethodServerTrustWithUrl:(NSString *)url challenge:(NSURLAuthenticationChallenge*)challenge
     completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition,
-                          NSURLCredential* credential))completionHandler 
+                          NSURLCredential* credential))completionHandler
 {
-    NSString *challengeKey = [NSString stringWithFormat:@"%@:%@:%ld", 
+#ifdef MAC_PLATFORM
+    // macOS: use the system default server-trust evaluation. The iOS custom SSL-error
+    // surfacing path (onSslErrorEventReceive + per-host credential cache below) is iOS-only
+    // and reaches into AceWebInfoManager state that is not wired on mac.
+    completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+    return;
+#else
+    NSString *challengeKey = [NSString stringWithFormat:@"%@:%@:%ld",
         challenge.protectionSpace.protocol, challenge.protectionSpace.host, (long)challenge.protectionSpace.port];
     if ([self.handleSslErrorUrls containsObject:challengeKey] ||
         [[AceWebInfoManager sharedManager].authChallengeUseCredentials containsObject:challengeKey]) {
@@ -3023,6 +3157,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
         [self handleSslErrorEventWithUrl:url isMainFrame:isMainFrame
             serverTrust:serverTrust errorCode:errorCode completionHandler:safeCompletionHandler];
     }
+#endif // MAC_PLATFORM
 }
 
 - (int)handleSslErrorEventErrorCode:(NSInteger)errorCode {
@@ -3297,7 +3432,9 @@ std::vector<std::string> convertCertificateChainToDer(NSArray *certificateChain)
     self.nestedOpt.scrollDown = static_cast<NestedScrollMode>(cppOptions->scrollDown);
     self.nestedOpt.scrollLeft = static_cast<NestedScrollMode>(cppOptions->scrollLeft);
     self.nestedOpt.scrollRight = static_cast<NestedScrollMode>(cppOptions->scrollRight);
+#ifndef MAC_PLATFORM
     self.webView.scrollView.directionalLockEnabled = NO;
+#endif
     self.webScrollEnabled = YES;
 }
 
@@ -3305,8 +3442,10 @@ std::vector<std::string> convertCertificateChainToDer(NSArray *certificateChain)
     if (_webScrollEnabled != webScrollEnabled) {
         _webScrollEnabled = webScrollEnabled;
     }
+#ifndef MAC_PLATFORM
     if (_webScrollEnabled != self.webView.scrollView.scrollEnabled) {
         self.webView.scrollView.scrollEnabled = _webScrollEnabled;
     }
+#endif
 }
 @end

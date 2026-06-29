@@ -54,6 +54,18 @@
 #include "configuration.h"
 #include "adapter/macos/entrance/mac_text_input.h"
 
+// M5 Web carrier: the web pattern (WEB_SUPPORTED) calls this C bridge to forward a
+// force-touch "is point inside web" hint into the window's touch handling. macOS has no
+// 3D-touch/force-touch, so we just store the flags (read paths are iOS-only). Mirrors the
+// definition in adapter/ios/entrance/WindowView.mm so the link resolves.
+static bool g_isPointInsideWebForceEnable = false;
+static bool g_isPointInsideWebForceResult = false;
+extern "C" void SetIsPointInsideWebForceResult(bool enable, bool result)
+{
+    g_isPointInsideWebForceEnable = enable;
+    g_isPointInsideWebForceResult = result;
+}
+
 namespace {
 // Match the iOS UITouchPhase ordering so synthetic-touch callers stay source
 // compatible across platforms.

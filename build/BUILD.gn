@@ -141,6 +141,19 @@ ohos_executable("ace_macos") {
   # macos/ branch in plugins/file/picker/filepicker/BUILD.gn pulls the AppKit impl.
   deps += [ "//plugins/file/picker/filepicker:file_picker_static" ]
 
+  # M5 Web carrier: WKWebView impl (ported from adapter/ios/capability/web). Provides the
+  # OC bridge functions WebDelegateCross/web_pattern (linked via libace) call.
+  deps += [ "//foundation/arkui/ace_engine/adapter/macos/capability/web:ace_web_macos" ]
+
+  # The cross-platform web pattern (web_delegate_cross.cpp / web_pattern.cpp / web_object_event.cpp
+  # / web_resource.cpp via arkuix_web_source) — not pulled into libace by default; link the
+  # is_arkui_x web_pattern_ng component like the soMap form components.
+  deps += [ "//foundation/arkui/ace_engine/frameworks/core/components_ng/pattern/web:ace_core_components_web_pattern_ng_mac" ]
+
+  # @ohos.web.webview NAPI module (WebviewController etc.) — the JS-side control layer for the
+  # Web component; without it `new webview.WebviewController()` throws and the page won't render.
+  deps += [ "//plugins/web/webview:web_webview_static_mac" ]
+
   frameworks = [
     "AppKit.framework",
     "QuartzCore.framework",

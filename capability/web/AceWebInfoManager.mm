@@ -58,7 +58,10 @@
 }
 
 - (NSString *)systemVersion {
-    return [[NSProcessInfo_compat currentDevice] systemVersion];
+    // iOS used UIDevice.systemVersion; macOS gets it from NSProcessInfo.
+    NSOperatingSystemVersion v = [[NSProcessInfo processInfo] operatingSystemVersion];
+    return [NSString stringWithFormat:@"%ld.%ld.%ld",
+            (long)v.majorVersion, (long)v.minorVersion, (long)v.patchVersion];
 }
 
 - (NSString *)getUserAgent {
@@ -112,11 +115,12 @@
 }
 
 - (NSString *)fallbackUserAgent {
-    NSString *deviceModel = [[NSProcessInfo_compat currentDevice] model];
+    // macOS desktop-style UA (iOS built a "Mobile" UA from UIDevice.model).
+    NSString *deviceModel = @"Macintosh";
     NSString *osVersion = [self systemVersion];
     return [NSString stringWithFormat:
-                @"Mozilla/5.0 (%@; CPU %@ OS %@ like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-                deviceModel, deviceModel, [osVersion stringByReplacingOccurrencesOfString:@"." withString:@"_"]];
+                @"Mozilla/5.0 (%@; Intel Mac OS X %@) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
+                deviceModel, [osVersion stringByReplacingOccurrencesOfString:@"." withString:@"_"]];
 }
 
 - (NSMutableSet<NSString *> *)authChallengeUseCredentials {

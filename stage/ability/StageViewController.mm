@@ -21,6 +21,7 @@
 #import "StageConfigurationManager.h"
 #import "StageContainerView.h"
 #import "WindowView.h"
+#import "AcePlatformPluginMac.h"
 #include "app_main.h"
 #include "window_view_adapter.h"
 #include "dump_helper.h"
@@ -39,6 +40,7 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
     WindowView *_windowView;
     StageContainerView* _stageContainerView;
     BOOL _needOnForeground;
+    AcePlatformPluginMac* _platformPlugin;
 }
 
 @property(nonatomic, strong, readwrite) NSString* instanceName;
@@ -129,6 +131,12 @@ int32_t CURRENT_STAGE_INSTANCE_Id = 0;
     [self initColorMode];
     [self initWindowView];
     [_windowView createSurfaceNode];
+
+    // M5 native carriers: stand up the platform resource register + per-carrier plugins (Web)
+    // before the page is created, so the web pattern's CreateResource("web", ...) resolves.
+    _platformPlugin = [[AcePlatformPluginMac alloc] initPlatformPlugin:self
+                                                           instanceId:_instanceId
+                                                           moduleName:self.moduleName];
 
     std::string paramsString = [self getCPPString:self.params.length ? self.params : @""];
     AppMain::GetInstance()->DispatchOnCreate(_cInstanceName, paramsString);
