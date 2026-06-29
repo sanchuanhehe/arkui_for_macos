@@ -49,6 +49,16 @@ extern "C" void* OHOS_ACE_DynamicModule_Create_PatternLock();
 extern "C" void* OHOS_ACE_DynamicModule_Create_Indexer();
 extern "C" void* OHOS_ACE_DynamicModule_Create_DataPanel();
 extern "C" void* OHOS_ACE_DynamicModule_Create_DynamicLayout();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Search();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Marquee();
+extern "C" void* OHOS_ACE_DynamicModule_Create_WaterFlow();
+extern "C" void* OHOS_ACE_DynamicModule_Create_FlowItem();
+extern "C" void* OHOS_ACE_DynamicModule_Create_ColumnSplit();
+extern "C" void* OHOS_ACE_DynamicModule_Create_RowSplit();
+extern "C" void* OHOS_ACE_DynamicModule_Create_SymbolGlyph();
+extern "C" void* OHOS_ACE_DynamicModule_Create_CalendarPicker();
+extern "C" void* OHOS_ACE_DynamicModule_Create_CalendarPickerDialog();
+extern "C" void* OHOS_ACE_DynamicModule_Create_Richeditor();
 
 namespace OHOS::Ace {
 namespace {
@@ -73,6 +83,16 @@ static std::unique_ptr<DynamicModule> g_patternlockModule = nullptr;
 static std::unique_ptr<DynamicModule> g_indexerModule = nullptr;
 static std::unique_ptr<DynamicModule> g_dataPanelModule = nullptr;
 static std::unique_ptr<DynamicModule> g_dynamicLayoutModule = nullptr;
+static std::unique_ptr<DynamicModule> g_searchModule = nullptr;
+static std::unique_ptr<DynamicModule> g_marqueeModule = nullptr;
+static std::unique_ptr<DynamicModule> g_waterFlowModule = nullptr;
+static std::unique_ptr<DynamicModule> g_flowItemModule = nullptr;
+static std::unique_ptr<DynamicModule> g_columnSplitModule = nullptr;
+static std::unique_ptr<DynamicModule> g_rowSplitModule = nullptr;
+static std::unique_ptr<DynamicModule> g_symbolModule = nullptr;
+static std::unique_ptr<DynamicModule> g_calendarPickerModule = nullptr;
+static std::unique_ptr<DynamicModule> g_calendarPickerDialogModule = nullptr;
+static std::unique_ptr<DynamicModule> g_richeditorModule = nullptr;
 
 // Initialize static modules
 void InitializeStaticModules()
@@ -95,6 +115,16 @@ void InitializeStaticModules()
         g_indexerModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Indexer()));
         g_dataPanelModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_DataPanel()));
         g_dynamicLayoutModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_DynamicLayout()));
+        g_searchModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Search()));
+        g_marqueeModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Marquee()));
+        g_waterFlowModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_WaterFlow()));
+        g_flowItemModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_FlowItem()));
+        g_columnSplitModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_ColumnSplit()));
+        g_rowSplitModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_RowSplit()));
+        g_symbolModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_SymbolGlyph()));
+        g_calendarPickerModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_CalendarPicker()));
+        g_calendarPickerDialogModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_CalendarPickerDialog()));
+        g_richeditorModule.reset(reinterpret_cast<DynamicModule*>(OHOS_ACE_DynamicModule_Create_Richeditor()));
         LOGI("InitializeStaticModules finished");
     });
 }
@@ -194,6 +224,36 @@ DynamicModule* GetStaticModule(const std::string& name)
     }
     if (name == "DynamicLayout") {
         return g_dynamicLayoutModule.get();
+    }
+    if (name == "Search") {
+        return g_searchModule.get();
+    }
+    if (name == "Marquee") {
+        return g_marqueeModule.get();
+    }
+    if (name == "WaterFlow") {
+        return g_waterFlowModule.get();
+    }
+    if (name == "FlowItem") {
+        return g_flowItemModule.get();
+    }
+    if (name == "ColumnSplit") {
+        return g_columnSplitModule.get();
+    }
+    if (name == "RowSplit") {
+        return g_rowSplitModule.get();
+    }
+    if (name == "SymbolGlyph") {
+        return g_symbolModule.get();
+    }
+    if (name == "CalendarPicker") {
+        return g_calendarPickerModule.get();
+    }
+    if (name == "CalendarPickerDialog") {
+        return g_calendarPickerDialogModule.get();
+    }
+    if (name == "Richeditor") {
+        return g_richeditorModule.get();
     }
     return nullptr;
 }
