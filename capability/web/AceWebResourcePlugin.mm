@@ -69,7 +69,7 @@ static NSMutableDictionary<NSString*, AceWeb*> *objectMap;
       aceWeb = [[AceWeb alloc] init:incId target:(NSViewController*)self.target onEvent:callback abilityInstanceId:self.instanceId];
     }
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_4
-    if([[[UIDevice currentDevice] systemVersion] floatValue] >= 16.4){
+    if([[[NSProcessInfo_compat currentDevice] systemVersion] floatValue] >= 16.4){
         [aceWeb getWeb].inspectable = [AceWeb getWebDebuggingAccess];
     }
 #endif

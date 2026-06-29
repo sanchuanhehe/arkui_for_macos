@@ -167,15 +167,15 @@ typedef void (^onDownloadFailed)(NSString* guid, NSString* state, int64_t code);
 typedef void (^onDownloadFinish)(NSString* guid, NSString* path);
 typedef id (^onJavaScriptFunction)(NSString* objName, NSString* methodName, NSArray* args);
 @interface AceWeb()<WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate, 
-                    UIScrollViewDelegate, NSURLSessionDownloadDelegate, WKHTTPCookieStoreObserver, WKURLSchemeHandler>
+                     NSURLSessionDownloadDelegate, WKHTTPCookieStoreObserver, WKURLSchemeHandler>
 /**webView*/
 @property (nonatomic, strong) AceWebView *webView;
 @property (nonatomic, assign) int64_t incId;
 @property (nonatomic, strong) WKPreferences *preferences;
 @property (nonatomic, strong) WKWebpagePreferences *webpagePreferences;
 @property (nonatomic, weak) NSViewController *target;
-@property (nonatomic, strong) NSSet<UITouch *> *currentUiTouchs;
-@property (nonatomic, strong) UIEvent  *currentEvent;
+@property (nonatomic, strong) NSSet<NSTouch *> *currentUiTouchs;
+@property (nonatomic, strong) NSEvent  *currentEvent;
 @property (nonatomic, assign) int8_t  currentType;
 @property (nonatomic, assign) CGFloat screenScale;
 @property (nonatomic, assign) CGFloat oldScale;
@@ -268,9 +268,14 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     if (self.webView == nil || !self.isFitContentMode) {
         return;
     }
+#ifdef MAC_PLATFORM
+    // macOS WKWebView exposes no UIScrollView; fit-content height is derived via JS
+    // (document.body.scrollHeight) instead. Handled in the navigation-finished path.
+    return;
+#else
     UIScrollView *scrollView = self.webView.scrollView;
     CGSize contentSize = scrollView.contentSize;
-    UIEdgeInsets adjustedInsets = UIEdgeInsetsZero;
+    NSEdgeInsets adjustedInsets = NSEdgeInsetsZero;
     if (@available(iOS 11.0, *)) {
         adjustedInsets = scrollView.adjustedContentInset;
     } else {
@@ -287,6 +292,7 @@ using SslError = OHOS::Ace::NG::Converter::SslError;
     self.webScrollEnabled = NO;
     scrollView.bounces = NO;
     [self fireCallback:NTC_ONCONTENTHEIGHTCHANGED params:[NSString stringWithFormat:@"%d", contentHeight]];
+#endif
 }
 
 - (instancetype)init:(int64_t)incId

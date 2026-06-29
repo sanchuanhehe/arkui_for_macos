@@ -58,7 +58,7 @@
 }
 
 - (NSString *)systemVersion {
-    return [[UIDevice currentDevice] systemVersion];
+    return [[NSProcessInfo_compat currentDevice] systemVersion];
 }
 
 - (NSString *)getUserAgent {
@@ -112,7 +112,7 @@
 }
 
 - (NSString *)fallbackUserAgent {
-    NSString *deviceModel = [[UIDevice currentDevice] model];
+    NSString *deviceModel = [[NSProcessInfo_compat currentDevice] model];
     NSString *osVersion = [self systemVersion];
     return [NSString stringWithFormat:
                 @"Mozilla/5.0 (%@; CPU %@ OS %@ like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
