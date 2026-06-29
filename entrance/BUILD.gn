@@ -30,6 +30,7 @@ template("ace_macos_source_set") {
       "$ace_root/frameworks",
       "$ace_root",
       "$ace_root/adapter/macos/entrance",
+      "$ace_root/adapter/macos/entrance/resource",
       "$ace_root/adapter/macos/stage/ability",
       "//foundation/appframework/window_manager/interfaces/innerkits/wm",
       "//foundation/appframework/window_manager/interfaces/innerkits/dm",
@@ -103,6 +104,18 @@ template("ace_macos_source_set") {
       "touch_event_convertor.cpp",
       "utils.cpp",
       "virtual_rs_window.mm",
+
+      # M5 native carriers (Web/Video/XComponent): the platform resource-register
+      # foundation, reused near-verbatim from adapter/ios (no UIKit deps — NSObject /
+      # NSMutableDictionary / CALayer only). WebDelegateCross / ExtSurface call
+      # PlatformResRegister::CreateResource(...) which ace_resource_register.cpp bridges
+      # (ace_bridge.mm) to AceResourceRegisterOC, which dispatches to the per-carrier
+      # AceResourcePlugin (AceWebResourcePlugin etc.).
+      "ace_bridge.mm",
+      "ace_resource_register.cpp",
+      "AceSurfaceHolder.mm",
+      "resource/AceResourcePlugin.m",
+      "resource/AceResourceRegisterOC.mm",
     ]
 
     if (target_cpu == "arm64") {
